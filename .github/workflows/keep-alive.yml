@@ -11,13 +11,12 @@ jobs:
     steps:
       - name: Ping
         run: |
-          code=$(curl -sS "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+          code=$(curl -sS "${{ secrets.SUPABASE_URL }}/rest/v1/rooms?select=id&limit=1" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
             -o body.txt -w "%{http_code}")
           echo "HTTP $code"
           head -c 300 body.txt; echo
-          echo "Lungime URL: ${#SUPABASE_URL}  Lungime cheie: ${#SUPABASE_ANON_KEY}  Prefix cheie: ${SUPABASE_ANON_KEY:0:15}"
           [ "$code" = "200" ]
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
