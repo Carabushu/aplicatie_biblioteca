@@ -4,6 +4,12 @@
 create extension if not exists pg_trgm;
 create extension if not exists unaccent;
 
+-- unaccent() nu e IMMUTABLE, deci nu poate intra într-un index; îl învelim.
+create or replace function f_unaccent(text) returns text
+language sql immutable parallel safe strict as $$
+  select public.unaccent('public.unaccent', $1)
+$$;
+
 -- ---------- Profiluri (membrii familiei) ----------
 create table if not exists members (
   id          uuid primary key default gen_random_uuid(),
@@ -53,8 +59,8 @@ create table if not exists books (
 );
 
 create index if not exists books_isbn_idx on books (isbn);
-create index if not exists books_title_trgm on books using gin (lower(unaccent(title)) gin_trgm_ops);
-create index if not exists books_author_trgm on books using gin (lower(unaccent(coalesce(author,''))) gin_trgm_ops);
+create index if not exists books_title_trgm on books using gin (lower(f_unaccent(title)) gin_trgm_ops);
+create index if not exists books_author_trgm on books using gin (lower(f_unaccent(coalesce(author,''))) gin_trgm_ops);
 create index if not exists books_room_idx on books (room_id);
 
 -- ---------- Stare citire per membru ----------
@@ -112,11 +118,11 @@ create or replace function find_similar_books(p_title text, p_author text defaul
 returns table (id uuid, title text, author text, isbn text, cover_url text, score real)
 language sql stable as $$
   select b.id, b.title, b.author, b.isbn, b.cover_url,
-         (similarity(lower(unaccent(b.title)), lower(unaccent(p_title)))
+         (similarity(lower(f_unaccent(b.title)), lower(f_unaccent(p_title)))
           + case when p_author is null or p_author = '' then 0
-                 else 0.5 * similarity(lower(unaccent(coalesce(b.author,''))), lower(unaccent(p_author))) end)::real as score
+                 else 0.5 * similarity(lower(f_unaccent(coalesce(b.author,''))), lower(f_unaccent(p_author))) end)::real as score
   from books b
-  where similarity(lower(unaccent(b.title)), lower(unaccent(p_title))) > 0.35
+  where similarity(lower(f_unaccent(b.title)), lower(f_unaccent(p_title))) > 0.35
   order by score desc
   limit p_limit;
 $$;
