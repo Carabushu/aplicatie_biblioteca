@@ -32,18 +32,18 @@ Ai nevoie de: cont GitHub, cont Supabase (gratuit, cu GitHub), cont Vercel (grat
 3. În meniul din stânga: **SQL Editor** → **New query**. Deschide fișierul `supabase/migrations/0001_schema.sql` din acest repo, copiază tot conținutul, lipește-l și apasă **Run**. Trebuie să apară „Success”. Asta creează tabelele, regulile de securitate, cele 5 camere și cele 4 profiluri.
 4. **Dezactivează înregistrarea** (ca nimeni să nu-și poată face cont): **Authentication → Sign In / Providers → Email**: lasă *Enable Email provider* pornit, dar oprește **Allow new users to sign up**. Oprește și **Confirm email** (nu avem nevoie). Save.
 5. **Creează contul familiei**: **Authentication → Users → Add user → Create new user**. Email: unul al vostru; parolă: una bună, pe care o știți toți patru. Bifează *Auto Confirm User*. Acesta e singurul cont care poate intra în aplicație.
-6. Ia cheile: **Project Settings (rotița) → API**. Notează:
-   - **Project URL** (ex. `https://abcdefgh.supabase.co`)
-   - **anon public** key (lung, începe cu `eyJ`). Aceasta e publică prin design — securitatea vine din RLS + faptul că singurul utilizator ești tu.
+6. Ia cheile: **Project Settings (rotița) → API Keys**. Notează:
+   - **Publishable key** (începe cu `sb_publishable_`). În interfețele mai vechi se numea **anon public** și începea cu `eyJ` — e același rol. E publică prin design: securitatea vine din RLS + faptul că singurul utilizator e contul familiei.
+   - **Project URL**: **Project Settings → General** (sau **Data API**), de forma `https://abcdefgh.supabase.co`.
 
-   ⚠️ Cheia **service_role** nu se folosește nicăieri în acest proiect. N-o pune niciunde.
+   ⚠️ Cheia **Secret** (`sb_secret_`, fostă *service_role*) nu se folosește nicăieri în acest proiect. N-o pune niciunde.
 
 ### 2. GitHub — codul și keep-alive
 
 1. Codul e deja în repo-ul tău (`biblioteca-acasa`).
 2. **Settings → Secrets and variables → Actions → New repository secret**, de două ori:
    - `SUPABASE_URL` = Project URL de mai sus
-   - `SUPABASE_ANON_KEY` = cheia anon
+   - `SUPABASE_ANON_KEY` = cheia publishable
 3. **Actions** → *Supabase keep-alive* → **Run workflow** o dată, ca test. Trebuie să afișeze `HTTP 200`. De acum rulează singur la 3 zile și ține proiectul Supabase treaz (planul gratuit pune pe pauză proiectele neatinse 7 zile).
 
 ### 3. Vercel — găzduirea
@@ -52,7 +52,7 @@ Ai nevoie de: cont GitHub, cont Supabase (gratuit, cu GitHub), cont Vercel (grat
 2. Framework: detectează singur *Vite*. Build command `npm run build`, output `dist` (implicite).
 3. **Environment Variables** — adaugă două:
    - `VITE_SUPABASE_URL` = Project URL
-   - `VITE_SUPABASE_ANON_KEY` = cheia anon
+   - `VITE_SUPABASE_ANON_KEY` = cheia publishable
 4. **Deploy**. În ~1 minut primești un link de forma `https://biblioteca-acasa-xxxx.vercel.app`.
 5. (Opțional) **Settings → Domains** dacă vrei un nume mai scurt.
 
