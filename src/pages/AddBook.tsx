@@ -127,11 +127,11 @@ export default function AddBook() {
             {hits.map((h, i) => (
               <button key={i} onClick={() => { setDraft(hitToBookInput(h, base())); setMode('formular') }}
                 className="card flex w-full gap-3 p-2 text-left">
-                <Cover book={{ title: h.title, cover_url: h.cover_url }} className="h-20 w-14 rounded-md shrink-0" />
+                <Cover book={{ title: h.title, cover_url: h.source === 'cip' ? null : h.cover_url }} className="h-20 w-14 rounded-md shrink-0" />
                 <div className="min-w-0">
                   <div className="font-semibold leading-tight line-clamp-2">{h.title}</div>
                   <div className="text-sm text-stone-600 truncate">{h.author}</div>
-                  <div className="text-xs text-stone-400">{[h.publisher, h.year].filter(Boolean).join(', ')} · {h.source === 'google' ? 'Google Books' : 'Open Library'}</div>
+                  <div className="text-xs text-stone-400">{[h.publisher, h.year].filter(Boolean).join(', ')} · {h.source === 'cip' ? 'CIP (Biblioteca Națională)' : h.source === 'google' ? 'Google Books' : 'Open Library'}</div>
                 </div>
               </button>
             ))}

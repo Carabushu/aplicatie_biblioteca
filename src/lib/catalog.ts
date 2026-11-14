@@ -3,6 +3,7 @@
  * Fără chei API. Rezultatele sunt normalizate într-un format comun.
  */
 import type { BookInput } from './types'
+import { supabase } from './supabase'
 
 export interface CatalogHit {
   title: string
@@ -13,7 +14,9 @@ export interface CatalogHit {
   language: string
   isbn: string
   cover_url: string | null
-  source: 'google' | 'openlibrary'
+  source: 'google' | 'openlibrary' | 'cip'
+  audience?: 'copii' | 'adulti'
+  needs_review?: boolean
 }
 
 export const normalizeIsbn = (s: string) => s.replace(/[^0-9Xx]/g, '').toUpperCase()
@@ -152,34 +155,84 @@ async function openLibrarySearch(q: string, max = 10): Promise<CatalogHit[]> {
   }
 }
 
+// ---------- CIP (BNaR) — tabelul local cip_books, umplut cu tools/cip-import ----------
+interface CipRow {
+  isbn: string; title: string; author: string | null; statement: string | null; publisher: string | null
+  place: string | null; year: number | null; audience: string | null; needs_review: boolean
+}
+
+function fromCip(r: CipRow): CatalogHit {
+  return {
+    title: r.title,
+    author: r.author ?? '',
+    publisher: r.publisher ?? '',
+    year: r.year,
+    pages: null,
+    language: 'ro',
+    isbn: r.isbn,
+    cover_url: `https://covers.openlibrary.org/b/isbn/${r.isbn}-M.jpg?default=false`,
+    source: 'cip',
+    audience: r.audience === 'copii' ? 'copii' : 'adulti',
+    needs_review: r.needs_review,
+  }
+}
+
+async function cipIsbn(isbn: string): Promise<CatalogHit | null> {
+  try {
+    const { data } = await supabase.from('cip_books').select('*').eq('isbn', isbn).maybeSingle()
+    return data ? fromCip(data as CipRow) : null
+  } catch { return null }
+}
+
+async function cipSearch(q: string): Promise<CatalogHit[]> {
+  try {
+    const { data } = await supabase.rpc('search_cip', { p_q: q, p_limit: 15 })
+    return ((data ?? []) as CipRow[]).map(fromCip)
+  } catch { return [] }
+}
+
+/** Coperta din Open Library există doar uneori; verificăm înainte să o păstrăm. */
+async function coverExists(url: string | null): Promise<string | null> {
+  if (!url) return null
+  try {
+    const r = await fetch(url, { method: 'HEAD', signal: withTimeout(5000) })
+    return r.ok ? url : null
+  } catch { return null }
+}
+
 // ---------- API public ----------
 
 /** Caută după ISBN în ambele cataloage; întoarce prima potrivire bună. */
 export async function lookupIsbn(raw: string): Promise<CatalogHit | null> {
   const isbn = normalizeIsbn(raw)
   if (!isbn) return null
-  const [g, ol] = await Promise.all([googleSearch(`isbn:${isbn}`, 1), openLibraryIsbn(isbn)])
-  const hit = g[0] ?? ol
-  if (!hit) return null
-  // completează golurile dintr-o sursă cu cealaltă
-  if (ol && g[0]) {
-    hit.cover_url ??= ol.cover_url
-    hit.publisher ||= ol.publisher
-    hit.pages ??= ol.pages
-    hit.year ??= ol.year
+  const [cip, g, ol] = await Promise.all([cipIsbn(isbn), googleSearch(`isbn:${isbn}`, 1), openLibraryIsbn(isbn)])
+  const online = g[0] ?? ol
+  if (cip) {
+    // CIP are datele oficiale ale ediției românești; cataloagele online completează coperta și paginile
+    cip.cover_url = online?.cover_url ?? (await coverExists(cip.cover_url))
+    cip.pages = online?.pages ?? null
+    return cip
   }
-  hit.isbn ||= isbn
-  return hit
+  if (!online) return null
+  if (ol && g[0]) {
+    online.cover_url ??= ol.cover_url
+    online.publisher ||= ol.publisher
+    online.pages ??= ol.pages
+    online.year ??= ol.year
+  }
+  online.isbn ||= isbn
+  return online
 }
 
 /** Căutare liberă după titlu / autor. Rezultate din ambele surse, fără duplicate după ISBN. */
 export async function searchCatalog(q: string): Promise<CatalogHit[]> {
   const query = q.trim()
   if (query.length < 2) return []
-  const [g, ol] = await Promise.all([googleSearch(query, 10), openLibrarySearch(query, 10)])
+  const [cip, g, ol] = await Promise.all([cipSearch(query), googleSearch(query, 10), openLibrarySearch(query, 10)])
   const seen = new Set<string>()
   const out: CatalogHit[] = []
-  for (const h of [...g, ...ol]) {
+  for (const h of [...cip, ...g, ...ol]) {
     const key = h.isbn ? normalizeIsbn(h.isbn) : `${h.title}|${h.author}`.toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
@@ -199,6 +252,8 @@ export function hitToBookInput(h: CatalogHit, base: BookInput): BookInput {
     language: h.language,
     isbn: h.isbn,
     cover_url: h.cover_url,
-    source: h.isbn ? 'isbn' : 'search',
+    audience: h.audience ? [h.audience] : base.audience,
+    needs_review: h.needs_review ?? false,
+    source: h.source === 'cip' ? 'cip' : h.isbn ? 'isbn' : 'search',
   }
 }

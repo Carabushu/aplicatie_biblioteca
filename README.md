@@ -73,6 +73,13 @@ Pe laptop: aceeași adresă în Chrome/Edge → iconița „Instalează” din b
 
 ---
 
+## Cărți românești: catalogul CIP (recomandat)
+
+Cataloagele online au puține cărți românești. Folderul `tools/cip-import/` construiește un catalog local
+din Bibliografia CIP a Bibliotecii Naționale (1998–prezent, ~350.000 de titluri): rulează `0002_cip_books.sql`
+în Supabase, apoi urmează `tools/cip-import/README.md`. După import, scanarea unui ISBN românesc găsește
+cartea instant, iar căutarea după titlu arată și rezultatele „CIP (Biblioteca Națională)”.
+
 ## Rulare locală (opțional)
 
 ```bash
