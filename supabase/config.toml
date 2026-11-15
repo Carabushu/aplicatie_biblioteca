@@ -1,0 +1,6 @@
+# Configurare Supabase CLI (folosită la `npx supabase functions deploy`).
+project_id = "biblioteca"
+
+[functions.analyze-image]
+# Verificarea utilizatorului se face în codul funcției (auth.getUser), compatibil cu noile chei "publishable".
+verify_jwt = false

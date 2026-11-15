@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useApp } from '../state/AppContext'
 import BookCard from '../components/BookCard'
 import { matches } from '../lib/text'
@@ -66,7 +67,10 @@ export default function Library() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-amber-900">📚 Cărțile noastre</h1>
-        <span className="text-sm text-stone-500">{visible.length} / {books.length}</span>
+        <div className="flex items-center gap-3">
+          <Link to="/lecturi" className="text-sm text-amber-800">🎒 Lecturi</Link>
+          <span className="text-sm text-stone-500">{visible.length} / {books.length}</span>
+        </div>
       </div>
 
       <input className="input" type="search" placeholder="Caută titlu, autor, serie… (🎤 din tastatură)" value={q} onChange={e => setQ(e.target.value)} />

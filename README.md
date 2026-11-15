@@ -73,6 +73,37 @@ Pe laptop: aceeași adresă în Chrome/Edge → iconița „Instalează” din b
 
 ---
 
+## V2 — funcțiile cu AI (poză cu coperta, poză cu raftul, lista școlară din poză)
+
+Pozele sunt trimise la Claude printr-o **Edge Function** Supabase (`supabase/functions/analyze-image`), ca cheia Anthropic
+să nu ajungă niciodată pe telefon. Costul: ~1–2 cenți pentru un raft, sub 1 cent pentru o copertă. Limită implicită: 80 de analize/zi.
+
+### Publicare (o singură dată)
+
+1. **Tabelele:** SQL Editor → rulează `supabase/migrations/0004_v2_ai.sql`.
+2. **Secretul:** Edge Functions → **Secrets** → `ANTHROPIC_API_KEY` = cheia din https://console.anthropic.com (API Keys).
+   Opțional: `AI_DAILY_LIMIT` (implicit 80), `ANTHROPIC_MODEL` (implicit `claude-haiku-5-5`).
+   În consola Anthropic setează un plafon lunar (Settings → Limits), de ex. 5 $.
+3. **Funcția** — una dintre variante:
+   - **A. Din browser (fără instalări):** Supabase → Edge Functions → *Deploy a new function* → *Via Editor*.
+     Nume: `analyze-image`. Șterge codul de exemplu, lipește conținutul din `supabase/functions/analyze-image/index.ts`, **Deploy**.
+     Apoi în pagina funcției → *Details* / *Settings*: dezactivează **Verify JWT** (autentificarea o face funcția însăși).
+   - **B. Din PowerShell (Supabase CLI, prin npx):**
+     ```powershell
+     cd ~\Documents\aplicatie_biblioteca
+     npx supabase login                       # deschide browserul, confirmi
+     npx supabase link --project-ref <ref>    # ref = Project ID din Project Settings → General
+     npx supabase functions deploy analyze-image --no-verify-jwt
+     ```
+4. **Test:** în aplicație → ➕ Adaugă → *Poză cu coperta*. Dacă apare o eroare, mesajul spune exact ce lipsește (secret, credit, limită).
+
+Consumul se vede în Supabase: SQL Editor → `select * from ai_usage_month;` și, cu prețuri reale, în consola Anthropic → Usage.
+
+### Ce fac funcțiile
+- **Poză cu coperta** (➕ Adaugă, sau oferită automat când un ISBN nu e găsit): Claude citește titlul, autorul, editura, anul, seria, publicul, genurile; aplicația caută apoi ediția în CIP/Google/Open Library pentru ISBN și copertă; tu verifici și salvezi.
+- **Poză cu raftul**: Claude listează cotoarele; fiecare titlu e căutat în cataloage și verificat la duplicate; bifezi, corectezi, alegi camera, salvezi tot dintr-o dată. Citirile nesigure primesc „De verificat”.
+- **Lecturi școlare** (🎒 din lista de cărți sau din Setări): lista de la școală tastată, lipită sau fotografiată → ✅ avem / ❌ lipsește, salvată pe profil; la redeschidere se re-potrivește automat cu cărțile adăugate între timp.
+
 ## Cărți românești: catalogul CIP (recomandat)
 
 Cataloagele online au puține cărți românești. Folderul `tools/cip-import/` construiește un catalog local
@@ -115,7 +146,6 @@ src/
 
 ## Ce urmează
 
-- **V2 (AI):** poză cu raftul → listă de titluri (Claude vision) → confirmare; poză cu coperta; completare metadate când cataloagele nu au cartea; lista de lecturi școlare (tastată sau fotografiată) vs. ce avem.
 - **V3:** împrumuturi cu reamintiri, lista de dorințe, serii incomplete, statistici și insigne pe profil, „ce citesc în continuare?”.
 
 ## Probleme frecvente

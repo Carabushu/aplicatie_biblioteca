@@ -8,6 +8,8 @@ import BookDetail from './pages/BookDetail'
 import AddBook from './pages/AddBook'
 import HaveIt from './pages/HaveIt'
 import Settings from './pages/Settings'
+import ShelfImport from './pages/ShelfImport'
+import SchoolLists from './pages/SchoolLists'
 
 function Gate() {
   const { session, authLoading, activeMember, members } = useApp()
@@ -26,6 +28,8 @@ function Gate() {
           <Route path="/adauga" element={<AddBook />} />
           <Route path="/avem" element={<HaveIt />} />
           <Route path="/setari" element={<Settings />} />
+          <Route path="/raft" element={<ShelfImport />} />
+          <Route path="/lecturi" element={<SchoolLists />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       )}

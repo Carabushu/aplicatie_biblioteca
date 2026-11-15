@@ -6,9 +6,13 @@ import { lazy, Suspense } from 'react'
 const BarcodeScanner = lazy(() => import('../components/BarcodeScanner'))
 import { Cover } from '../components/BookCard'
 import { hitToBookInput, isValidIsbn, lookupIsbn, normalizeIsbn, searchCatalog, type CatalogHit } from '../lib/catalog'
+import { GENRES } from '../lib/constants'
+const GENRE_SET = new Set<string>(GENRES)
 import { emptyBook, type BookInput } from '../lib/types'
+import { analyzeCover, pickImage } from '../lib/ai'
+import { norm } from '../lib/text'
 
-type Mode = 'alege' | 'scan' | 'isbn' | 'cauta' | 'manual' | 'formular'
+type Mode = 'alege' | 'scan' | 'isbn' | 'cauta' | 'manual' | 'formular' | 'coperta'
 
 function Big({ icon, title, sub, onClick }: { icon: string; title: string; sub: string; onClick: () => void }) {
   return (
@@ -72,6 +76,35 @@ export default function AddBook() {
     if (r.length === 0) setMsg('Nimic găsit. Încearcă alt titlu sau adaugă manual.')
   }
 
+  /** Poza cu coperta: Claude citește titlul/autorul/editura; apoi încercăm să găsim ediția în cataloage pentru ISBN și copertă. */
+  const fromCover = async (keepIsbn?: string) => {
+    const file = await pickImage(true)
+    if (!file) return
+    setMode('coperta'); setMsg(null); setBusy(true)
+    try {
+      const { cover } = await analyzeCover(file, activeMember?.id ?? null)
+      let d: BookInput = {
+        ...base(), title: cover.title ?? '', author: cover.author ?? '', publisher: cover.publisher ?? '', year: cover.year ?? null,
+        pages: cover.pages ?? null, series: cover.series ?? '', series_volume: cover.series_volume ?? null, language: cover.language ?? 'ro',
+        audience: cover.audience ? [cover.audience] : base().audience, min_age: cover.min_age ?? null,
+        genres: (cover.genres ?? []).filter(g => (GENRE_SET as Set<string>).has(g)), isbn: keepIsbn ?? '',
+        source: 'cover_photo', needs_review: (cover.confidence ?? 0) < 0.7,
+      }
+      // potrivire în cataloage (CIP/Google/OL) pentru ISBN, copertă, an
+      const hits = await searchCatalog(`${d.title} ${d.author ?? ''}`.trim()).catch(() => [])
+      const t = norm(d.title)
+      const hit = hits.find(h => { const ht = norm(h.title); return ht === t || ht.startsWith(t) || t.startsWith(ht) })
+      if (hit) {
+        d = { ...d, isbn: keepIsbn || hit.isbn || d.isbn, cover_url: hit.cover_url ?? null, publisher: d.publisher || hit.publisher,
+          year: d.year ?? hit.year, pages: d.pages ?? hit.pages }
+      }
+      setDraft(d); setMode('formular')
+    } catch (e) {
+      setMsg((e as Error).message); setMode('alege')
+    }
+    setBusy(false)
+  }
+
   const save = async () => {
     if (!draft.title.trim()) { setMsg('Titlul e obligatoriu.'); return }
     setBusy(true)
@@ -94,8 +127,10 @@ export default function AddBook() {
           <Big icon="📷" title="Scanează codul de bare" sub="Codul ISBN de pe spatele cărții" onClick={() => setMode('scan')} />
           <Big icon="🔢" title="Tastează ISBN-ul" sub="Când codul nu se scanează" onClick={() => setMode('isbn')} />
           <Big icon="🔎" title="Caută după titlu sau autor" sub="Completare automată din cataloage" onClick={() => setMode('cauta')} />
-          <Big icon="✍️" title="Introdu manual" sub="Când cartea nu se găsește nicăieri" onClick={() => { setDraft(base()); setMode('formular') }} />
-          <p className="text-xs text-stone-500 px-1">Curând: poză cu raftul întreg și poză cu coperta (citite de AI).</p>
+          <Big icon="🖼️" title="Poză cu coperta" sub="AI citește titlul, autorul, editura — pentru cărți fără cod de bare" onClick={() => void fromCover()} />
+          <Big icon="📚" title="Poză cu raftul întreg" sub="AI citește toate cotoarele; tu confirmi lista" onClick={() => nav('/raft')} />
+          <Big icon="✍️" title="Introdu manual" sub="Când nimic altceva nu merge" onClick={() => { setDraft(base()); setMode('formular') }} />
+          {msg && <p className="text-sm text-red-600">{msg}</p>}
         </div>
       )}
 
@@ -111,7 +146,12 @@ export default function AddBook() {
             <button className="btn-primary flex-1" disabled={busy || !isbn} onClick={() => void fromIsbn(isbn)}>{busy ? 'Caut…' : 'Caută'}</button>
           </div>
           {msg && <p className="text-sm text-stone-600">{msg}</p>}
-          {msg && draft.isbn && <button className="btn-secondary w-full" onClick={() => setMode('formular')}>Completează manual</button>}
+          {msg && draft.isbn && (
+            <div className="flex gap-2">
+              <button className="btn-primary flex-1" onClick={() => void fromCover(draft.isbn ?? undefined)}>🖼️ Fotografiază coperta</button>
+              <button className="btn-secondary flex-1" onClick={() => setMode('formular')}>Completează manual</button>
+            </div>
+          )}
         </div>
       )}
 
@@ -140,9 +180,16 @@ export default function AddBook() {
         </div>
       )}
 
+      {mode === 'coperta' && (
+        <div className="text-center space-y-2 py-10">
+          <div className="text-4xl">🖼️</div>
+          <div className="animate-pulse text-amber-800 font-medium">Citesc coperta… (5–10 s)</div>
+        </div>
+      )}
+
       {mode === 'formular' && (
         <div className="space-y-4">
-          {draft.source !== 'manual' && <p className="text-sm text-green-700">Date completate automat — verifică-le și corectează ce nu e bine.</p>}
+          {draft.source !== 'manual' && <p className="text-sm text-green-700">{draft.source === 'cover_photo' ? 'Date citite de pe copertă' : 'Date completate automat'} — verifică-le și corectează ce nu e bine.</p>}
           <BookForm value={draft} onChange={setDraft} rooms={rooms} existingIsbns={existingIsbns} />
           {msg && <p className="text-sm text-red-600">{msg}</p>}
           <button className="btn-primary w-full" disabled={busy} onClick={() => void save()}>{busy ? 'Salvez…' : '💾 Salvează în bibliotecă'}</button>

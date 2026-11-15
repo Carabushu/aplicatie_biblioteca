@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useApp } from '../state/AppContext'
 import { supabase } from '../lib/supabase'
 import { booksToCsv, csvToBooks, download } from '../lib/csv'
@@ -86,11 +87,12 @@ export default function Settings() {
         </>
       )}
 
+      <Link to="/lecturi" className="btn-secondary w-full">🎒 Lecturi școlare</Link>
       {msg && <p className="text-sm text-stone-700">{msg}</p>}
 
       <button className="btn-secondary w-full" onClick={() => void refreshBooks()}>🔄 Reîncarcă datele</button>
       <button className="text-sm text-stone-500 underline w-full" onClick={() => void signOut()}>Ieși din contul familiei</button>
-      <p className="text-center text-xs text-stone-400">Biblioteca de acasă · v1</p>
+      <p className="text-center text-xs text-stone-400">Biblioteca de acasă · v2</p>
     </div>
   )
 }
