@@ -87,8 +87,7 @@ export function pickImage(capture = true): Promise<File | null> {
     input.accept = 'image/*'
     if (capture) input.setAttribute('capture', 'environment')
     input.onchange = () => resolve(input.files?.[0] ?? null)
-    // dacă utilizatorul închide dialogul fără să aleagă, onchange nu se declanșează pe toate browserele
-    window.addEventListener('focus', () => setTimeout(() => resolve(input.files?.[0] ?? null), 800), { once: true })
+    input.oncancel = () => resolve(null) // Chrome 113+: utilizatorul a închis dialogul fără să aleagă
     input.click()
   })
 }
