@@ -69,12 +69,28 @@ function getStream(url, hops = 0) {
   })
 }
 
+/** Caută în Wayback Machine cea mai apropiată copie arhivată a unui URL; întoarce URL-ul cu octeții originali (id_). */
+async function waybackUrl(url) {
+  try {
+    const bare = url.replace(/^https?:\/\//, '')
+    const r = await fetch(`https://archive.org/wayback/available?url=${encodeURIComponent(bare)}`, { signal: AbortSignal.timeout(20_000) })
+    if (!r.ok) return null
+    const j = await r.json()
+    const c = j?.archived_snapshots?.closest
+    if (!c?.available || !c.url) return null
+    return c.url.replace(/\/web\/(\d+)\//, '/web/$1id_/')
+  } catch { return null }
+}
+
 async function download(key, url) {
   const file = path.join('cache', `${key}.pdf`)
   try { if ((await stat(file)).size > 10_000) return file } catch { /* nu există */ }
   if (!url) throw new Error('lipsește din cache')
   const candidates = [url]
   if (url.startsWith('https://')) candidates.push(url.replace(/^https:/, 'http:'))
+  // serverul vechi al BNaR nu mai are fișierele (404) → încercăm copia din Internet Archive
+  const wb = await waybackUrl(url)
+  if (wb) candidates.push(wb)
   let lastErr
   for (const u of candidates) {
     try {
@@ -82,6 +98,7 @@ async function download(key, url) {
       await pipeline(res, createWriteStream(file))
       const size = (await stat(file)).size
       if (size < 10_000) throw new Error(`fișier prea mic (${size} octeți) — probabil pagină de eroare`)
+      if (u.includes('web.archive.org')) console.log(`   (din Internet Archive)`)
       return file
     } catch (e) {
       lastErr = e
