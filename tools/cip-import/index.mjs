@@ -113,17 +113,18 @@ for (const [key, { url }] of selected) {
   try {
     const file = await download(key, url)
     const lines = await extractLines(file)
-    const { records, problems, entries } = parseIssue(lines, key)
+    const { records, problems, entries, stoppedEarly } = parseIssue(lines, key)
     let added = 0
     for (const r of records) {
       if (!r.isbn) continue
       const prev = byIsbn.get(r.isbn)
       if (!prev || prev.issue < key) { byIsbn.set(r.isbn, r); added++ } // numărul mai nou câștigă
     }
-    const row = { issue: key, entries, records: records.length, withIsbn: records.filter(r => r.isbn).length, children: records.filter(r => r.audience === 'copii').length, needsReview: records.filter(r => r.needs_review).length, problems: problems.length, seconds: +((Date.now() - t0) / 1000).toFixed(1) }
+    const row = { issue: key, entries, stoppedEarly, records: records.length, withIsbn: records.filter(r => r.isbn).length, children: records.filter(r => r.audience === 'copii').length, needsReview: records.filter(r => r.needs_review).length, problems: problems.length, seconds: +((Date.now() - t0) / 1000).toFixed(1) }
     report.push(row)
     console.log(`[${done}/${selected.length}] ${key}: ${entries} intrări, ${row.withIsbn} ISBN, ${row.children} copii, ${row.needsReview} de verificat (${row.seconds}s)`)
-    if (entries < 100) console.warn(`   ⚠ puține intrări în ${key} — formatul poate diferi; verifică manual`)
+    if (stoppedEarly) console.warn(`   ⚠ ${key}: parsarea s-a oprit la intrarea ${stoppedEarly.lastParsed}, dar PDF-ul pare să aibă cel puțin ${stoppedEarly.lastSeen}`)
+    else if (entries < 100) console.warn(`   ⚠ puține intrări în ${key} — formatul poate diferi; verifică manual`)
   } catch (e) {
     report.push({ issue: key, error: String(e) })
     console.error(`[${done}/${selected.length}] ${key}: EROARE ${e}`)

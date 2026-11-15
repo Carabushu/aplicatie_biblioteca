@@ -180,10 +180,18 @@ export function parseEntry(block, issue) {
 
 export function parseIssue(lines, issue) {
   const blocks = splitEntries(lines)
+  // diagnostic: dacă după ultima intrare parsată mai există linii care arată a intrări numerotate, parsarea s-a oprit devreme
+  const lastN = blocks.length ? blocks[blocks.length - 1].n : 0
+  let maxSeen = 0
+  for (const ln of lines) {
+    const m = ln.text.match(/^\s*(\d{1,5})\.\s*\p{Lu}/u)
+    if (m) { const n = Number(m[1]); if (n > lastN && n < lastN + 3000 && n > maxSeen) maxSeen = n }
+  }
+  const stoppedEarly = maxSeen > lastN + 5 ? { lastParsed: lastN, lastSeen: maxSeen } : null
   const records = []
   const problems = []
   for (const b of blocks) {
     try { records.push(...parseEntry(b, issue)) } catch (e) { problems.push({ entry: b.n, error: String(e) }) }
   }
-  return { records, problems, entries: blocks.length }
+  return { records, problems, entries: blocks.length, stoppedEarly }
 }
