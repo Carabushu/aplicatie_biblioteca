@@ -8,7 +8,7 @@ După aceea, scanarea unui ISBN românesc găsește cartea instant, fără inter
 
 ## Pași (o singură dată, pe laptop)
 
-1. În Supabase → SQL Editor rulează `supabase/migrations/0002_cip_books.sql`.
+1. În Supabase → SQL Editor rulează `supabase/migrations/0002_cip_books.sql`, apoi `0003_cip_books_slim.sql`.
 2. În acest folder:
    ```bash
    npm install
@@ -29,6 +29,12 @@ După aceea, scanarea unui ISBN românesc găsește cartea instant, fără inter
 ## Actualizare lunară
 
 Rulezi din nou `node index.mjs --from <anul curent>` și `node upload.mjs`. PDF-urile deja descărcate nu se refac.
+
+## Arhiva veche (înainte de 2019)
+
+Linkurile din arhiva BNaR spre `oldsite.bibnat.ro` sunt moarte (404); scriptul ia automat copiile din Internet Archive,
+alegând capturile complete (unele sunt trunchiate). Numerele scanate ca imagine (fără strat de text, în special
+cele vechi, înainte de ~2008) sunt sărite și listate la final — ar necesita OCR.
 
 ## Ce știe și ce nu știe CIP
 

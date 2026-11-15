@@ -16,7 +16,9 @@ const ENC_RE = new RegExp('[' + Object.keys(ENC_FIX).join('') + ']', 'g')
 export const fixEncoding = s => s.replace(ENC_RE, c => ENC_FIX[c])
 
 const ISBN_RE = /ISBN\s*:?\s*([0-9][0-9\-]{8,20}[0-9Xx])/g
-const ENTRY_START = /^\s*(\d{1,5})\.\s*(\S.*)$/
+// „67. BARKER, …” sau „451.România …”; nu „087.5”, „821.135.1-93”, „2014. - Index”
+const ENTRY_START = /^\s*([1-9]\d{0,4})\.(?:\s+((?!-|ISBN\b|p\.|vol\.)\S.*)|(\p{L}.*))$/u
+const isNextEntry = (n, expected) => n >= expected && n <= expected + 20 // numerotarea sare uneori cu 1–2
 const CIP_CODE = /CIP\s+(\d{3,4}-\d+)/
 const PAGE_HEADER = /^\s*(CIP\s+\d+|\d+\s+BIBLIOGRAFIA CĂRŢILOR ÎN CURS DE APARIŢIE|BIBLIOGRAFIA CĂRŢILOR ÎN CURS DE APARIŢIE\s*\d*)\s*$/i
 const UDC_LINE = /^\s*\d{1,3}(?:[.\/]\d+)*(?:[.\/\-][0-9().:=\-\/]*)*\s*$/
@@ -44,7 +46,7 @@ export function isValidIsbn(s) {
 
 /** „POPESCU, ION-MARIA” → „Ion-Maria Popescu” */
 function humanizeAuthor(last, first) {
-  const tc = s => s.toLowerCase().replace(/(^|[\s\-'’.])(\p{L})/gu, (m, p, c) => p + c.toUpperCase())
+  const tc = s => s.replace(/ç/g, 'Á').toLowerCase().replace(/(^|[\s\-'’.])(\p{L})/gu, (m, p, c) => p + c.toUpperCase())
   const l = tc(last.trim()), f = first ? tc(first.trim()) : ''
   return (f ? `${f} ${l}` : l).replace(/\s+/g, ' ').trim()
 }
@@ -61,19 +63,18 @@ export function splitEntries(lines) {
     if (PAGE_HEADER.test(t)) continue
     if (cur === null) {
       const m = t.match(ENTRY_START)
-      if (m && Number(m[1]) === expected) {
-        cur = { n: expected, page: ln.page, lines: [m[2]] }
+      if (m && isNextEntry(Number(m[1]), expected)) {
+        cur = { n: Number(m[1]), page: ln.page, lines: [m[2] ?? m[3]] }
         started = true
       }
       continue
     }
     // plasă de siguranță: dacă începe următoarea intrare numerotată fără să fi văzut codul CIP, închidem intrarea curentă
     const nm = t.match(ENTRY_START)
-    if (nm && Number(nm[1]) === cur.n + 1 && /^\s*\d{1,5}\.\s*(\p{Lu}|["„(])/u.test(t)) {
+    if (nm && isNextEntry(Number(nm[1]), cur.n + 1)) {
       cur.incomplete = true
       entries.push(cur)
-      expected = cur.n + 1
-      cur = { n: expected, page: ln.page, lines: [nm[2]] }
+      cur = { n: Number(nm[1]), page: ln.page, lines: [nm[2] ?? nm[3]] }
       continue
     }
     cur.lines.push(t)
@@ -113,7 +114,7 @@ export function parseEntry(block, issue) {
 
   // autor cu majuscule: „POPESCU, ION. ” sau „POPESCU, ION-MARIA. ” (poate conține diacritice, apostrof, cratimă)
   let author = null
-  const am = head.match(/^([\p{Lu}][\p{Lu}'’\-\s]+?),\s+([\p{Lu}][\p{Lu}'’\-\s.]*?)\.\s+(?=\S)/u)
+  const am = head.match(/^([\p{Lu}][\p{Lu}'’\-\sç]+?),\s+([\p{Lu}][\p{Lu}'’\-\s.ç]*?)\.\s+(?=\S)/u)
   if (am && am[1].length <= 40 && am[2].length <= 40) {
     author = humanizeAuthor(am[1], am[2])
     head = head.slice(am[0].length)

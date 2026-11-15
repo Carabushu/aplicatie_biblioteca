@@ -69,35 +69,50 @@ function getStream(url, hops = 0) {
   })
 }
 
-/** Caută în Wayback Machine cea mai apropiată copie arhivată a unui URL; întoarce URL-ul cu octeții originali (id_). */
-async function waybackUrl(url) {
+/** Toate capturile Wayback ale unui URL (status 200), cele mai mari primele — capturile trunchiate sunt frecvente la PDF-uri. */
+async function waybackUrls(url) {
   try {
     const bare = url.replace(/^https?:\/\//, '')
-    const r = await fetch(`https://archive.org/wayback/available?url=${encodeURIComponent(bare)}`, { signal: AbortSignal.timeout(20_000) })
-    if (!r.ok) return null
-    const j = await r.json()
-    const c = j?.archived_snapshots?.closest
-    if (!c?.available || !c.url) return null
-    return c.url.replace(/\/web\/(\d+)\//, '/web/$1id_/')
-  } catch { return null }
+    const r = await fetch(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(bare)}&output=json&fl=timestamp,length,statuscode,digest&filter=statuscode:200`, { signal: AbortSignal.timeout(30_000) })
+    if (!r.ok) return []
+    const rows = await r.json()
+    const seen = new Set()
+    return rows.slice(1)
+      .map(([ts, len, , digest]) => ({ ts, len: Number(len) || 0, digest }))
+      .filter(c => { if (seen.has(c.digest)) return false; seen.add(c.digest); return true })
+      .sort((a, b) => b.len - a.len)
+      .slice(0, 4)
+      .map(c => `https://web.archive.org/web/${c.ts}id_/${url}`)
+  } catch { return [] }
+}
+
+/** Un PDF întreg are marcajul %%EOF aproape de final. */
+async function isValidPdf(file) {
+  try {
+    const st = await stat(file)
+    if (st.size < 10_000) return false
+    const fh = await (await import('node:fs/promises')).open(file, 'r')
+    const buf = Buffer.alloc(Math.min(4096, st.size))
+    await fh.read(buf, 0, buf.length, st.size - buf.length)
+    await fh.close()
+    return buf.includes('%%EOF')
+  } catch { return false }
 }
 
 async function download(key, url) {
   const file = path.join('cache', `${key}.pdf`)
-  try { if ((await stat(file)).size > 10_000) return file } catch { /* nu există */ }
-  if (!url) throw new Error('lipsește din cache')
+  if (await isValidPdf(file)) return file
+  if (!url) throw new Error('lipsește din cache sau e trunchiat')
   const candidates = [url]
   if (url.startsWith('https://')) candidates.push(url.replace(/^https:/, 'http:'))
-  // serverul vechi al BNaR nu mai are fișierele (404) → încercăm copia din Internet Archive
-  const wb = await waybackUrl(url)
-  if (wb) candidates.push(wb)
+  // serverul vechi al BNaR nu mai are fișierele (404) → încercăm copiile din Internet Archive
+  candidates.push(...await waybackUrls(url))
   let lastErr
   for (const u of candidates) {
     try {
       const res = await getStream(u)
       await pipeline(res, createWriteStream(file))
-      const size = (await stat(file)).size
-      if (size < 10_000) throw new Error(`fișier prea mic (${size} octeți) — probabil pagină de eroare`)
+      if (!(await isValidPdf(file))) throw new Error('fișier incomplet sau nevalid')
       if (u.includes('web.archive.org')) console.log(`   (din Internet Archive)`)
       return file
     } catch (e) {
@@ -130,6 +145,11 @@ for (const [key, { url }] of selected) {
   try {
     const file = await download(key, url)
     const lines = await extractLines(file)
+    if (lines.length < 50) {
+      report.push({ issue: key, scanned: true })
+      console.log(`[${done}/${selected.length}] ${key}: PDF scanat (fără strat de text) — sărit; ar necesita OCR`)
+      continue
+    }
     const { records, problems, entries, stoppedEarly } = parseIssue(lines, key)
     let added = 0
     for (const r of records) {
@@ -154,6 +174,8 @@ await writeFile('out/cip_books.csv', csv)
 await writeFile('out/report.json', JSON.stringify(report, null, 1))
 console.log(`\nTotal: ${rows.length} ISBN-uri unice → out/cip_books.csv (${(Buffer.byteLength(csv) / 1e6).toFixed(1)} MB)`)
 console.log(`Copii: ${rows.filter(r => r.audience === 'copii').length}; de verificat: ${rows.filter(r => r.needs_review).length}`)
+const scanned = report.filter(r => r.scanned)
+if (scanned.length) console.log(`Numere scanate, fără text (${scanned.length}): ${scanned.map(r => r.issue).join(', ')}`)
 const failed = report.filter(r => r.error)
 if (failed.length) console.log(`Numere nedescărcate (${failed.length}): ${failed.map(r => r.issue).join(', ')} — rulează din nou mai târziu; detalii în out/report.json`)
 console.log('Raport per număr: out/report.json')

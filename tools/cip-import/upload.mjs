@@ -33,10 +33,12 @@ if (authErr) { console.error('Login eșuat:', authErr.message); process.exit(1) 
 
 const [header, ...lines] = parseCsv(await readFile('out/cip_books.csv', 'utf8'))
 const num = v => (v === '' ? null : Number(v))
+// Coloanele păstrate în baza de date (varianta „slim”: fără mențiunea de responsabilitate, cod CIP, număr bibliografie)
+const KEEP = ['isbn', 'title', 'author', 'publisher', 'place', 'year', 'edition', 'udc', 'audience', 'series', 'series_volume', 'needs_review']
 const records = lines.filter(l => l.length === header.length).map(l => {
   const o = Object.fromEntries(header.map((h, i) => [h, l[i] === '' ? null : l[i]]))
   o.year = num(o.year); o.series_volume = num(o.series_volume); o.needs_review = o.needs_review === 'true'
-  return o
+  return Object.fromEntries(KEEP.map(k => [k, o[k] ?? null]))
 })
 console.log(`${records.length} înregistrări de încărcat`)
 
