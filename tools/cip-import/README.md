@@ -32,8 +32,8 @@ Rulezi din nou `node index.mjs --from <anul curent>` și `node upload.mjs`. PDF-
 
 ## Spațiu ocupat (măsurat, nov 2026)
 
-~403.000 de ISBN-uri: tabel 69 MB + index titlu (trigram) 50 MB + index ISBN 18 MB ≈ **138 MB** din 500 MB (plan gratuit).
-Indexul pe titlu e necesar: fără el căutarea durează ~10 s pe instanța gratuită.
+~403.000 de ISBN-uri: tabel 69 MB + index titlu 50 MB + index autor ~15 MB + index ISBN 18 MB ≈ **150 MB** din 500 MB (plan gratuit).
+Ambele indexuri trigram sunt necesare: fără oricare dintre ele, căutarea durează ~10 s pe instanța gratuită; cu ambele, ~0,2 s.
 
 ## Arhiva veche (înainte de 2019)
 
