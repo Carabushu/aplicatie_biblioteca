@@ -40,13 +40,15 @@ const records = lines.filter(l => l.length === header.length).map(l => {
   o.year = num(o.year); o.series_volume = num(o.series_volume); o.needs_review = o.needs_review === 'true'
   return Object.fromEntries(KEEP.map(k => [k, o[k] ?? null]))
 })
-console.log(`${records.length} înregistrări de încărcat`)
+const skipped = records.filter(r => !r.isbn || !r.title || !r.title.trim())
+const toUpload = records.filter(r => r.isbn && r.title && r.title.trim())
+console.log(`${toUpload.length} înregistrări de încărcat${skipped.length ? ` (${skipped.length} sărite: fără titlu sau ISBN)` : ''}`)
 
 const BATCH = 1000
-for (let i = 0; i < records.length; i += BATCH) {
-  const chunk = records.slice(i, i + BATCH)
+for (let i = 0; i < toUpload.length; i += BATCH) {
+  const chunk = toUpload.slice(i, i + BATCH)
   const { error } = await supabase.from('cip_books').upsert(chunk, { onConflict: 'isbn' })
   if (error) { console.error(`Lot ${i / BATCH + 1}: ${error.message}`); process.exit(1) }
-  process.stdout.write(`\r${Math.min(i + BATCH, records.length)} / ${records.length}`)
+  process.stdout.write(`\r${Math.min(i + BATCH, toUpload.length)} / ${toUpload.length}`)
 }
 console.log('\nGata.')
