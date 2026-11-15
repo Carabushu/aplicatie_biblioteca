@@ -17,7 +17,7 @@ export const fixEncoding = s => s.replace(ENC_RE, c => ENC_FIX[c])
 
 const ISBN_RE = /ISBN\s*:?\s*([0-9][0-9\-]{8,20}[0-9Xx])/g
 const ENTRY_START = /^\s*(\d{1,5})\.\s*(\S.*)$/
-const CIP_CODE = /CIP\s+(\d{4}-\d+)/
+const CIP_CODE = /CIP\s+(\d{3,4}-\d+)/
 const PAGE_HEADER = /^\s*(CIP\s+\d+|\d+\s+BIBLIOGRAFIA CĂRŢILOR ÎN CURS DE APARIŢIE|BIBLIOGRAFIA CĂRŢILOR ÎN CURS DE APARIŢIE\s*\d*)\s*$/i
 const UDC_LINE = /^\s*\d{1,3}(?:[.\/]\d+)*(?:[.\/\-][0-9().:=\-\/]*)*\s*$/
 
@@ -67,6 +67,15 @@ export function splitEntries(lines) {
       }
       continue
     }
+    // plasă de siguranță: dacă începe următoarea intrare numerotată fără să fi văzut codul CIP, închidem intrarea curentă
+    const nm = t.match(ENTRY_START)
+    if (nm && Number(nm[1]) === cur.n + 1 && /^\s*\d{1,5}\.\s*(\p{Lu}|["„(])/u.test(t)) {
+      cur.incomplete = true
+      entries.push(cur)
+      expected = cur.n + 1
+      cur = { n: expected, page: ln.page, lines: [nm[2]] }
+      continue
+    }
     cur.lines.push(t)
     if (CIP_CODE.test(t)) {
       entries.push(cur)
@@ -74,6 +83,7 @@ export function splitEntries(lines) {
       cur = null
     }
   }
+  if (cur && cur.lines.length > 1) { cur.incomplete = true; entries.push(cur) }
   return entries
 }
 
@@ -87,7 +97,7 @@ export function parseEntry(block, issue) {
   }
   const flat = fixEncoding(merged.join(' ').replace(/\s+/g, ' ').trim())
 
-  const cipCodes = [...flat.matchAll(/CIP\s+(\d{4}-\d+)/g)].map(m => m[1])
+  const cipCodes = [...flat.matchAll(/CIP\s+(\d{3,4}-\d+)/g)].map(m => m[1])
   // linia UDC = ultima linie „numerică” înainte de codul CIP
   let udc = null
   for (let i = block.lines.length - 1; i >= 0; i--) {
@@ -171,6 +181,7 @@ export function parseEntry(block, issue) {
     out.push({ ...base, isbn: isbns[0] ?? null, series: null, series_volume: null })
   }
   for (const r of out) {
+    if (block.incomplete) r.needs_review = true
     if (!r.title || r.title.length < 2) r.needs_review = true
     if (!r.publisher || !r.year) r.needs_review = true
     if (r.isbn && !isValidIsbn(r.isbn)) r.needs_review = true
