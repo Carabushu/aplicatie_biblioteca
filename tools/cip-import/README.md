@@ -30,6 +30,11 @@ După aceea, scanarea unui ISBN românesc găsește cartea instant, fără inter
 
 Rulezi din nou `node index.mjs --from <anul curent>` și `node upload.mjs`. PDF-urile deja descărcate nu se refac.
 
+## Spațiu ocupat (măsurat, nov 2026)
+
+~403.000 de ISBN-uri: tabel 69 MB + index titlu (trigram) 50 MB + index ISBN 18 MB ≈ **138 MB** din 500 MB (plan gratuit).
+Indexul pe titlu e necesar: fără el căutarea durează ~10 s pe instanța gratuită.
+
 ## Arhiva veche (înainte de 2019)
 
 Linkurile din arhiva BNaR spre `oldsite.bibnat.ro` sunt moarte (404); scriptul ia automat copiile din Internet Archive,
