@@ -8,7 +8,6 @@
 import { mkdir, readFile, writeFile, stat } from 'node:fs/promises'
 import { createWriteStream } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
-import { Readable } from 'node:stream'
 import path from 'node:path'
 import { extractLines } from './extract.mjs'
 import { parseIssue } from './parse.mjs'
@@ -47,14 +46,48 @@ async function listIssues() {
 }
 
 // ---------- 2. descărcare cu cache ----------
+import https from 'node:https'
+import http from 'node:http'
+
+/** GET cu redirecturi; pentru serverul vechi (oldsite.bibnat.ro) acceptăm certificatul expirat/greșit. */
+function getStream(url, hops = 0) {
+  return new Promise((resolve, reject) => {
+    if (hops > 5) return reject(new Error('prea multe redirecturi'))
+    const u = new URL(url)
+    const lib = u.protocol === 'http:' ? http : https
+    const insecure = /oldsite\.bibnat\.ro$/i.test(u.hostname)
+    const req = lib.get(u, { headers: { 'User-Agent': 'biblioteca-acasa-cip-import/1.0 (uz personal)' }, rejectUnauthorized: !insecure, timeout: 60_000 }, res => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        res.resume()
+        return resolve(getStream(new URL(res.headers.location, u).href, hops + 1))
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode}`)) }
+      resolve(res)
+    })
+    req.on('timeout', () => req.destroy(new Error('timeout')))
+    req.on('error', reject)
+  })
+}
+
 async function download(key, url) {
   const file = path.join('cache', `${key}.pdf`)
   try { if ((await stat(file)).size > 10_000) return file } catch { /* nu există */ }
   if (!url) throw new Error('lipsește din cache')
-  const res = await fetch(url, { headers: { 'User-Agent': 'biblioteca-acasa-cip-import/1.0 (uz personal)' } })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(file))
-  return file
+  const candidates = [url]
+  if (url.startsWith('https://')) candidates.push(url.replace(/^https:/, 'http:'))
+  let lastErr
+  for (const u of candidates) {
+    try {
+      const res = await getStream(u)
+      await pipeline(res, createWriteStream(file))
+      const size = (await stat(file)).size
+      if (size < 10_000) throw new Error(`fișier prea mic (${size} octeți) — probabil pagină de eroare`)
+      return file
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  throw new Error(`${lastErr?.message ?? lastErr}${lastErr?.cause ? ' / ' + lastErr.cause.message : ''} (${url})`)
 }
 
 // ---------- 3. CSV ----------
@@ -103,4 +136,6 @@ await writeFile('out/cip_books.csv', csv)
 await writeFile('out/report.json', JSON.stringify(report, null, 1))
 console.log(`\nTotal: ${rows.length} ISBN-uri unice → out/cip_books.csv (${(Buffer.byteLength(csv) / 1e6).toFixed(1)} MB)`)
 console.log(`Copii: ${rows.filter(r => r.audience === 'copii').length}; de verificat: ${rows.filter(r => r.needs_review).length}`)
+const failed = report.filter(r => r.error)
+if (failed.length) console.log(`Numere nedescărcate (${failed.length}): ${failed.map(r => r.issue).join(', ')} — rulează din nou mai târziu; detalii în out/report.json`)
 console.log('Raport per număr: out/report.json')
