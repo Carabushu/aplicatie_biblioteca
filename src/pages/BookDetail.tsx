@@ -6,6 +6,7 @@ import { Cover } from '../components/BookCard'
 import LoanPanel from '../components/LoanPanel'
 import type { BookInput, ReadStatus } from '../lib/types'
 import { LANGUAGES, STATUS_LABEL } from '../lib/constants'
+import { todayLocal } from '../lib/loans'
 
 export default function BookDetail() {
   const { id } = useParams()
@@ -45,11 +46,11 @@ export default function BookDetail() {
     if (!activeMember) return
     void setReadingStatus({
       book_id: book.id, member_id: activeMember.id, status,
-      finished_at: status === 'read' ? new Date().toISOString().slice(0, 10) : null,
+      finished_at: status === 'read' ? (myStatus?.finished_at ?? todayLocal()) : null,
       current_page: status === 'reading' ? (myStatus?.current_page ?? null) : null,
     })
   }
-  const setField = (patch: { rating?: number | null; impression?: string | null; current_page?: number | null }) => {
+  const setField = (patch: { rating?: number | null; impression?: string | null; current_page?: number | null; finished_at?: string | null }) => {
     if (!activeMember) return
     void setReadingStatus({ book_id: book.id, member_id: activeMember.id, status: myStatus?.status ?? 'read', ...patch })
   }
@@ -111,6 +112,11 @@ export default function BookDetail() {
           )}
           {myStatus?.status === 'read' && (
             <>
+              <div className="flex items-center gap-2 text-sm">
+                <span>Terminată pe</span>
+                <input className="input !w-auto !py-1" type="date" max={todayLocal()} defaultValue={myStatus.finished_at ?? ''}
+                  onBlur={e => setField({ finished_at: e.target.value || null })} />
+              </div>
               <div className="flex gap-1 text-2xl">
                 {[1, 2, 3, 4, 5].map(n => (
                   <button key={n} onClick={() => setField({ rating: n })} className={n <= (myStatus.rating ?? 0) ? '' : 'opacity-30'}>⭐</button>

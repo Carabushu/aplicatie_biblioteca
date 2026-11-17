@@ -12,6 +12,7 @@ import ShelfImport from './pages/ShelfImport'
 import SchoolLists from './pages/SchoolLists'
 import Loans from './pages/Loans'
 import Wishlist from './pages/Wishlist'
+import MyProfile from './pages/MyProfile'
 
 function Gate() {
   const { session, authLoading, activeMember, members } = useApp()
@@ -34,6 +35,7 @@ function Gate() {
           <Route path="/lecturi" element={<SchoolLists />} />
           <Route path="/imprumuturi" element={<Loans />} />
           <Route path="/dorinte" element={<Wishlist />} />
+          <Route path="/eu" element={<MyProfile />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       )}

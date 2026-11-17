@@ -53,7 +53,8 @@ export default function Layout() {
               <span className="text-xl">{t.icon}</span>{t.label}
             </NavLink>
           ))}
-          <NavLink to="/profil" className="flex flex-1 flex-col items-center py-2 text-xs text-stone-500">
+          <NavLink to="/eu"
+            className={({ isActive }) => `flex flex-1 flex-col items-center py-2 text-xs ${isActive ? 'text-amber-800 font-semibold' : 'text-stone-500'}`}>
             <span className="text-xl">{activeMember?.avatar ?? '👤'}</span>{activeMember?.name ?? 'Profil'}
           </NavLink>
         </div>

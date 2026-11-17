@@ -39,9 +39,10 @@ src/lib/ai.ts                 redimensionare imagine + apel Edge Function
 src/lib/pwa.ts                actualizare automată PWA (T1)
 src/lib/loans.ts              calcule termene împrumuturi
 src/lib/wishes.ts             dorințe: verificare duplicate, adăugare cu confirmări
+src/lib/stats.ts              statistici și insigne pe profil (calcul la citire)
 src/lib/types.ts, constants.ts, csv.ts, text.ts
 src/components/               BarcodeScanner (BarcodeDetector nativ + ZXing lazy), BookForm, BookCard, Layout, LoanPanel
-src/pages/                    Login, ChooseProfile, Library, BookDetail, AddBook, HaveIt, ShelfImport, SchoolLists, Settings, Loans, Wishlist
+src/pages/                    Login, ChooseProfile, Library, BookDetail, AddBook, HaveIt, ShelfImport, SchoolLists, Settings, Loans, Wishlist, MyProfile
 supabase/migrations/          0001 schema · 0002 cip_books · 0003 slim + indexuri · 0004 ai_calls, school_lists, „La serviciu” · 0005 wishlist (coloane în plus)
 supabase/functions/analyze-image/
 tools/cip-import/             import CIP (Node): index.mjs (descărcare+parsare), parse.mjs, extract.mjs, upload.mjs, README
@@ -81,7 +82,7 @@ Funcții SQL: `f_unaccent` (înveliș imutabil), `find_similar_books(p_title, p_
 
 ## 7. Plan V3
 
-Ordinea recomandată: T1 → A → B → restul. (T1, A și B livrate pe 17 nov 2026; urmează C.)
+Ordinea recomandată: T1 → A → B → restul. (T1, A, B și C livrate pe 17 nov 2026; urmează D.)
 
 ### T1. Actualizare automată a PWA — FĂCUT (17 nov 2026, de confirmat pe telefon)
 `src/lib/pwa.ts`, apelat din `main.tsx`: `registerSW` din `virtual:pwa-register` (tipuri: `vite-plugin-pwa/client` în `tsconfig.app.json`).
@@ -108,8 +109,13 @@ Fără migrare nouă (tabelul `loans` și politica RLS existau).
 - `SchoolLists`: la cărțile lipsă „⭐ la dorințe” (pentru profilul listei, notă „Lectură școlară: …”), plus „Pune toate cele N lipsă la dorințe”.
 - `AppContext`: `wishes`, `refreshWishes`, `addWish`, `deleteWish`; cache offline în `localStorage` (lista se vede și fără rețea, în librărie).
 
-### C. Statistici și insigne pe profil
-Din `reading_status`: cărți citite pe an, pagini (din `books.pages`), genuri preferate; insigne simple (5/10/25 cărți, prima carte de 300+ pagini). Pagină „Profilul meu”. Fără tabele noi (calcul la citire).
+### C. Statistici și insigne pe profil — FĂCUT (17 nov 2026, de confirmat pe telefon)
+Fără tabele noi; totul se calculează din `reading_status` + `books` (`src/lib/stats.ts`).
+- `pages/MyProfile.tsx` (`/eu`): fila cu avatarul din meniul de jos duce acum aici (nu direct la schimbarea profilului); schimbarea se face cu „🔄 Schimbă” (→ `/profil`). Se pot vedea și ceilalți membri (`/eu?m=<id>`, din „În familie”).
+- Conținut: cifre (citite anul acesta / total / pagini), „În curs” cu bară de progres, insigne, grafic „Cărți citite pe ani” (ultimii 6 ani, o singură culoare, atingerea unei coloane arată cărți + pagini), genuri preferate, autori frecvenți, nota medie, cea mai lungă carte, cărțile de 5 stele, citite recent, comparație pe familie în anul curent.
+- Insigne (16): 1/5/10/25/50/100 cărți; 300+ și 500+ pagini; 1.000/5.000/10.000 pagini cumulate; Explorator (5 genuri); Critic (5 impresii); Serie terminată (toate cărțile unei serii, min. 2, din bibliotecă); Maraton (3 într-o lună); O carte pe lună (12 într-un an). Data câștigării = `finished_at` al cărții care a declanșat-o (cărțile fără dată se ordonează la final). Cele necâștigate arată progresul.
+- `BookDetail`: la „Citită” apare „Terminată pe” (dată editabilă), ca lecturile vechi să cadă în anul corect; re-marcarea ca citită păstrează data existentă.
+- Verificat: logica pe date de test (script) și pagina randată în Chrome headless cu date simulate.
 
 ### D. „Ce citesc în continuare?”
 Buton care propune o carte necitită de profilul activ, potrivită ca public și `min_age`, opțional pe gen; exclude `adults_only` pentru copii și cărțile împrumutate.
