@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { useApp } from '../state/AppContext'
 import { supabase } from '../lib/supabase'
 import { booksToCsv, csvToBooks, download } from '../lib/csv'
+import { memberAge } from '../lib/suggest'
+import { todayLocal } from '../lib/loans'
 
 export default function Settings() {
-  const { rooms, books, refreshRooms, refreshBooks, signOut, activeMember, members } = useApp()
+  const { rooms, books, refreshRooms, refreshBooks, signOut, activeMember, members, updateMember } = useApp()
   const [newRoom, setNewRoom] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -25,6 +27,11 @@ export default function Settings() {
     const n = books.filter(b => b.room_id === id).length
     if (!confirm(`Ștergi camera „${name}”?${n ? ` ${n} cărți vor rămâne fără cameră.` : ''}`)) return
     await supabase.from('rooms').delete().eq('id', id); await refreshRooms(); await refreshBooks()
+  }
+
+  const setBirthDate = async (id: string, raw: string) => {
+    try { await updateMember(id, { birth_date: raw || null }); setMsg('Am salvat data nașterii.') }
+    catch (e) { setMsg('Nu am putut salva: ' + (e as Error).message + ' — ai rulat migrarea 0006?') }
   }
 
   const exportCsv = () => download(`biblioteca-${new Date().toISOString().slice(0, 10)}.csv`, booksToCsv(books, rooms), 'text/csv')
@@ -72,6 +79,20 @@ export default function Settings() {
               <button className="btn-primary" onClick={() => void addRoom()}>Adaugă</button>
             </div>
           </div>
+
+          {members.some(m => m.is_child) && (
+            <div className="card p-4 space-y-2">
+              <div className="font-semibold">Vârsta copiilor</div>
+              <p className="text-xs text-stone-500">Data nașterii — ca „Ce citesc în continuare?” să nu propună cărți pentru o vârstă mai mare.</p>
+              {members.filter(m => m.is_child).map(m => (
+                <div key={m.id} className="flex items-center gap-2">
+                  <span className="flex-1">{m.avatar} {m.name}{memberAge(m) !== null ? ` · ${memberAge(m)} ani` : ''}</span>
+                  <input className="input !w-auto !py-1.5" type="date" max={todayLocal()} defaultValue={m.birth_date ?? ''}
+                    aria-label={`Data nașterii pentru ${m.name}`} onBlur={e => { if (e.target.value !== (m.birth_date ?? '')) void setBirthDate(m.id, e.target.value) }} />
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="card p-4 space-y-2">
             <div className="font-semibold">Copie de siguranță</div>

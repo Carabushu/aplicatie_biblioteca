@@ -8,6 +8,8 @@ export interface Member {
   color: string
   is_child: boolean
   sort_order: number
+  /** din migrarea 0006; poate lipsi dacă migrarea nu a fost rulată */
+  birth_date?: string | null
 }
 
 export interface Room {

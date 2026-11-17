@@ -40,10 +40,11 @@ src/lib/pwa.ts                actualizare automată PWA (T1)
 src/lib/loans.ts              calcule termene împrumuturi
 src/lib/wishes.ts             dorințe: verificare duplicate, adăugare cu confirmări
 src/lib/stats.ts              statistici și insigne pe profil (calcul la citire)
+src/lib/suggest.ts            „Ce citesc în continuare?”: filtre + scor
 src/lib/types.ts, constants.ts, csv.ts, text.ts
 src/components/               BarcodeScanner (BarcodeDetector nativ + ZXing lazy), BookForm, BookCard, Layout, LoanPanel
-src/pages/                    Login, ChooseProfile, Library, BookDetail, AddBook, HaveIt, ShelfImport, SchoolLists, Settings, Loans, Wishlist, MyProfile
-supabase/migrations/          0001 schema · 0002 cip_books · 0003 slim + indexuri · 0004 ai_calls, school_lists, „La serviciu” · 0005 wishlist (coloane în plus)
+src/pages/                    Login, ChooseProfile, Library, BookDetail, AddBook, HaveIt, ShelfImport, SchoolLists, Settings, Loans, Wishlist, MyProfile, WhatNext
+supabase/migrations/          0001 schema · 0002 cip_books · 0003 slim + indexuri · 0004 ai_calls, school_lists, „La serviciu” · 0005 wishlist (coloane în plus) · 0006 members.birth_date
 supabase/functions/analyze-image/
 tools/cip-import/             import CIP (Node): index.mjs (descărcare+parsare), parse.mjs, extract.mjs, upload.mjs, README
 ```
@@ -82,7 +83,7 @@ Funcții SQL: `f_unaccent` (înveliș imutabil), `find_similar_books(p_title, p_
 
 ## 7. Plan V3
 
-Ordinea recomandată: T1 → A → B → restul. (T1, A, B și C livrate pe 17 nov 2026; urmează D.)
+Ordinea recomandată: T1 → A → B → restul. (T1, A, B, C și D livrate pe 17 nov 2026; urmează E.)
 
 ### T1. Actualizare automată a PWA — FĂCUT (17 nov 2026, de confirmat pe telefon)
 `src/lib/pwa.ts`, apelat din `main.tsx`: `registerSW` din `virtual:pwa-register` (tipuri: `vite-plugin-pwa/client` în `tsconfig.app.json`).
@@ -117,8 +118,11 @@ Fără tabele noi; totul se calculează din `reading_status` + `books` (`src/lib
 - `BookDetail`: la „Citită” apare „Terminată pe” (dată editabilă), ca lecturile vechi să cadă în anul corect; re-marcarea ca citită păstrează data existentă.
 - Verificat: logica pe date de test (script) și pagina randată în Chrome headless cu date simulate.
 
-### D. „Ce citesc în continuare?”
-Buton care propune o carte necitită de profilul activ, potrivită ca public și `min_age`, opțional pe gen; exclude `adults_only` pentru copii și cărțile împrumutate.
+### D. „Ce citesc în continuare?” — FĂCUT (17 nov 2026, de confirmat pe telefon; necesită migrarea 0006)
+- `supabase/migrations/0006_member_birth_date.sql`: `members.birth_date`. Se completează în Setări → „Vârsta copiilor” (câmp de dată; vârsta = ani împliniți). Datele de naștere nu se pun în repo.
+- `src/lib/suggest.ts`: filtre stricte — necitită și neîncepută de profil, nu e dată cu împrumut, public potrivit (copii → `copii`, adulți → `adulti`), fără `adults_only` la copii, `min_age` ≤ vârsta. Scor: următorul volum dintr-o serie începută (+5; volumele care sar peste unul necitit ×0,2), lectură școlară a profilului (+3), genuri/autori citiți (notele 4–5 contează dublu), note 4–5 date de familie, adăugată în ultimele 60 de zile; la copii, cărți cu `min_age` mult sub vârstă ×0,4. Alegere aleatoare ponderată (scor²) dintre primele 12; „🎲 Alta” nu repetă până nu le trece pe toate.
+- `pages/WhatNext.tsx` (`/ce-citesc`; link „🎲 Ce citesc?” în antetul listei și buton în „Profilul meu”): filtre opționale gen + lungime, cartea propusă cu motivele și camera/raftul, „📖 Încep s-o citesc” (marchează „În curs” și deschide cartea), „Alte idei”.
+- Verificat randat în Chrome headless cu date simulate (excluderile pentru împrumut și vârstă funcționează).
 
 ### E. Serii incomplete
 Grupare după `series`; arată volumele lipsă între 1 și max(`series_volume`); buton „la dorințe”.

@@ -51,6 +51,7 @@ export default function MyProfile() {
         <p className="-mt-2 text-xs text-stone-500">{stats.withoutPages === 1 ? 'O carte citită nu are' : `${carti(stats.withoutPages)} citite nu au`} numărul de pagini completat, deci nu intră în totalul de pagini.</p>
       )}
 
+      {isMe && <Link to="/ce-citesc" className="btn-primary w-full">🎲 Ce citesc în continuare?</Link>}
       {stats.reading.length > 0 && (
         <section className="card p-4 space-y-3">
           <h2 className="font-semibold">📖 În curs</h2>

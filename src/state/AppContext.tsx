@@ -18,6 +18,7 @@ interface AppState {
   setActiveMember: (m: Member | null) => void
   refreshBooks: () => Promise<void>
   refreshRooms: () => Promise<void>
+  updateMember: (id: string, patch: Partial<Pick<Member, 'birth_date'>>) => Promise<void>
   addBook: (b: BookInput) => Promise<Book>
   updateBook: (id: string, b: Partial<BookInput>) => Promise<void>
   deleteBook: (id: string) => Promise<void>
@@ -77,6 +78,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshMembers = useCallback(async () => {
     const { data } = await supabase.from('members').select('*').order('sort_order')
     if (data) setMembers(data as Member[])
+  }, [])
+
+  const updateMember = useCallback(async (id: string, patch: Partial<Pick<Member, 'birth_date'>>) => {
+    const { data, error } = await supabase.from('members').update(patch).eq('id', id).select().single()
+    if (error) throw error
+    setMembers(prev => prev.map(m => (m.id === id ? (data as Member) : m)))
   }, [])
 
   const refreshBooks = useCallback(async () => {
@@ -185,7 +192,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value: AppState = {
     session, authLoading, members, rooms, books, wishes, booksLoading, online,
-    activeMember, setActiveMember, refreshBooks, refreshRooms,
+    activeMember, setActiveMember, refreshBooks, refreshRooms, updateMember,
     addBook, updateBook, deleteBook, setReadingStatus, addLoan, returnLoan, refreshWishes, addWish, deleteWish, signOut,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
