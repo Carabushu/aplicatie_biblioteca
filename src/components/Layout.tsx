@@ -8,6 +8,7 @@ const tabs = [
   { to: '/', label: 'Cărți', icon: '📚' },
   { to: '/avem', label: 'Avem?', icon: '🔍' },
   { to: '/adauga', label: 'Adaugă', icon: '➕' },
+  { to: '/dorinte', label: 'Dorințe', icon: '⭐' },
   { to: '/setari', label: 'Setări', icon: '⚙️' },
 ]
 

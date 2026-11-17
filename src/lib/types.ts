@@ -94,3 +94,20 @@ export const emptyBook = (): BookInput => ({
   needs_review: false,
   created_by: null,
 })
+
+export interface Wish {
+  id: string
+  title: string
+  author: string | null
+  isbn: string | null
+  note: string | null
+  /** profilul a cărui dorință este */
+  added_by: string | null
+  publisher: string | null
+  year: number | null
+  cover_url: string | null
+  source: string | null
+  created_at: string
+}
+
+export type WishInput = Omit<Wish, 'id' | 'created_at'>

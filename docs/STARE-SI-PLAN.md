@@ -38,17 +38,18 @@ src/lib/catalog.ts            căutare: cip_books → Google Books → Open Libr
 src/lib/ai.ts                 redimensionare imagine + apel Edge Function
 src/lib/pwa.ts                actualizare automată PWA (T1)
 src/lib/loans.ts              calcule termene împrumuturi
+src/lib/wishes.ts             dorințe: verificare duplicate, adăugare cu confirmări
 src/lib/types.ts, constants.ts, csv.ts, text.ts
 src/components/               BarcodeScanner (BarcodeDetector nativ + ZXing lazy), BookForm, BookCard, Layout, LoanPanel
-src/pages/                    Login, ChooseProfile, Library, BookDetail, AddBook, HaveIt, ShelfImport, SchoolLists, Settings, Loans
-supabase/migrations/          0001 schema · 0002 cip_books · 0003 slim + indexuri · 0004 ai_calls, school_lists, „La serviciu”
+src/pages/                    Login, ChooseProfile, Library, BookDetail, AddBook, HaveIt, ShelfImport, SchoolLists, Settings, Loans, Wishlist
+supabase/migrations/          0001 schema · 0002 cip_books · 0003 slim + indexuri · 0004 ai_calls, school_lists, „La serviciu” · 0005 wishlist (coloane în plus)
 supabase/functions/analyze-image/
 tools/cip-import/             import CIP (Node): index.mjs (descărcare+parsare), parse.mjs, extract.mjs, upload.mjs, README
 ```
 
 ### Model de date
 `members`, `rooms`, `books` (public `audience[]`, genuri, etichete, serie, cameră, sub-locație, exemplare, `adults_only`, `needs_review`, `source`),
-`reading_status` (carte × membru), `loans` (interfață din V3-A), `wishlist` (există, **fără interfață**),
+`reading_status` (carte × membru), `loans` (interfață din V3-A), `wishlist` (interfață din V3-B; `added_by` = al cui e),
 `cip_books`, `ai_calls` (+ view `ai_usage_month`), `school_lists`, `school_list_items`.
 Funcții SQL: `f_unaccent` (înveliș imutabil), `find_similar_books(p_title, p_author, p_limit)`, `search_cip(p_q, p_limit)`.
 
@@ -80,7 +81,7 @@ Funcții SQL: `f_unaccent` (înveliș imutabil), `find_similar_books(p_title, p_
 
 ## 7. Plan V3
 
-Ordinea recomandată: T1 → A → B → restul. (T1 și A livrate pe 17 nov 2026; urmează B.)
+Ordinea recomandată: T1 → A → B → restul. (T1, A și B livrate pe 17 nov 2026; urmează C.)
 
 ### T1. Actualizare automată a PWA — FĂCUT (17 nov 2026, de confirmat pe telefon)
 `src/lib/pwa.ts`, apelat din `main.tsx`: `registerSW` din `virtual:pwa-register` (tipuri: `vite-plugin-pwa/client` în `tsconfig.app.json`).
@@ -97,13 +98,15 @@ Fără migrare nouă (tabelul `loans` și politica RLS existau).
 - `Layout`: banner roșu cu împrumuturile peste termen la deschidere (se ascunde cu ×). `BookCard`: etichete „La X” / „De la X”, roșii când sunt întârziate.
 - Profilurile copiilor văd împrumuturile (fără cărțile `adults_only`), dar nu pot crea/returna. Offline: butoanele sunt dezactivate.
 
-### B. Lista de dorințe (cerință din prompt-ul inițial)
-Tabelul `wishlist` există (`title`, `author`, `isbn`, `note`, `added_by`).
-- Pagină „Dorințe”: adăugare (manual, din căutarea în cataloage, din „Avem cartea?” când răspunsul e NU, din lecturile școlare care lipsesc).
-- La adăugare: avertizare dacă o avem deja (`find_similar_books` + ISBN exact).
-- „Am cumpărat-o” → deschide `AddBook` pre-completat și șterge dorința.
-- În `HaveIt`: înlocuiește/completează linkul „Am cumpărat-o — adaug acum” cu „Adaugă la dorințe”.
-Gata când: lista e comună familiei, cu autorul dorinței vizibil, și avertizează la duplicate.
+### B. Lista de dorințe — FĂCUT (17 nov 2026, de confirmat pe telefon; necesită migrarea 0005)
+- `supabase/migrations/0005_wishlist.sql`: coloane `publisher`, `year`, `cover_url`, `source` + index pe `added_by`. **De rulat de utilizator în SQL Editor.**
+- Semantică: `added_by` = profilul a cărui dorință este. Fiecare profil are lista lui („Ale mele”); fila „Toată familia” le grupează pe persoane (idei de cadouri). Părinții pot adăuga și pentru alt profil („Pentru cine?”); copiii doar pentru ei și pot șterge doar dorințele proprii.
+- `pages/Wishlist.tsx` (`/dorinte`, filă nouă ⭐ în meniul de jos): adăugare cu titlu/autor/notă, „🔎 Caută ediția” în cataloage, „📷 Scanează codul”, sau „Adaugă așa”. Pe fiecare dorință: „✅ O avem deja” (verificare locală ISBN/titlu), „🛒 Am cumpărat-o”, 🗑️.
+- `lib/wishes.ts` → `addWishChecked`: refuză dublura pe lista aceluiași profil; întreabă dacă o avem deja (ISBN exact + `find_similar_books` > 0,55); anunță dacă altcineva o vrea deja.
+- „🛒 Am cumpărat-o” → `/adauga?dorinta=<id>`: formular pre-completat (+ completare din cataloage după ISBN), dorința se șterge la salvare.
+- `HaveIt`: la NU → „⭐ La dorințe” (cu datele găsite după ISBN) și „➕ Am cumpărat-o”; la căutare text fără rezultat → „⭐ Pune „…” la dorințe”.
+- `SchoolLists`: la cărțile lipsă „⭐ la dorințe” (pentru profilul listei, notă „Lectură școlară: …”), plus „Pune toate cele N lipsă la dorințe”.
+- `AppContext`: `wishes`, `refreshWishes`, `addWish`, `deleteWish`; cache offline în `localStorage` (lista se vede și fără rețea, în librărie).
 
 ### C. Statistici și insigne pe profil
 Din `reading_status`: cărți citite pe an, pagini (din `books.pages`), genuri preferate; insigne simple (5/10/25 cărți, prima carte de 300+ pagini). Pagină „Profilul meu”. Fără tabele noi (calcul la citire).

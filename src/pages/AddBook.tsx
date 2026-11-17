@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useApp } from '../state/AppContext'
 import BookForm from '../components/BookForm'
@@ -26,9 +26,18 @@ function Big({ icon, title, sub, onClick }: { icon: string; title: string; sub: 
 export default function AddBook() {
   const nav = useNavigate()
   const [params] = useSearchParams()
-  const { books, rooms, activeMember, addBook } = useApp()
-  const [mode, setMode] = useState<Mode>(() => (params.get('isbn') ? 'isbn' : 'alege'))
-  const [draft, setDraft] = useState<BookInput>(() => ({ ...emptyBook(), created_by: activeMember?.id ?? null, audience: [activeMember?.is_child ? 'copii' : 'adulti'] }))
+  const { books, rooms, members, activeMember, addBook, wishes, deleteWish } = useApp()
+  // „Am cumpărat-o” din lista de dorințe: formularul pornește pre-completat, iar dorința se șterge la salvare
+  const [wish] = useState(() => wishes.find(w => w.id === params.get('dorinta')) ?? null)
+  const [mode, setMode] = useState<Mode>(() => (wish ? 'formular' : params.get('isbn') ? 'isbn' : 'alege'))
+  const [draft, setDraft] = useState<BookInput>(() => {
+    const forMember = members.find(m => m.id === wish?.added_by) ?? activeMember
+    const b: BookInput = { ...emptyBook(), created_by: activeMember?.id ?? null, audience: [forMember?.is_child ? 'copii' : 'adulti'] }
+    return wish
+      ? { ...b, title: wish.title, author: wish.author ?? '', isbn: wish.isbn ?? '', publisher: wish.publisher ?? '', year: wish.year,
+          cover_url: wish.cover_url, source: 'wishlist' }
+      : b
+  })
   const [isbn, setIsbn] = useState(params.get('isbn') ?? '')
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<CatalogHit[]>([])
@@ -65,6 +74,21 @@ export default function AddBook() {
       setDraft({ ...base(), isbn: code, source: 'isbn' })
     }
   }, [existingIsbns, books, nav, base])
+
+  // dorința are ISBN → completăm din cataloage ce lipsește (pagini, limbă, copertă), fără să suprascriem ce e deja
+  useEffect(() => {
+    if (!wish?.isbn) return
+    let alive = true
+    void lookupIsbn(wish.isbn).then(hit => {
+      if (!alive || !hit) return
+      setDraft(d => ({
+        ...d, publisher: d.publisher || hit.publisher, year: d.year ?? hit.year, pages: d.pages ?? hit.pages,
+        language: hit.language || d.language, cover_url: d.cover_url ?? hit.cover_url,
+        audience: hit.audience ? [hit.audience] : d.audience,
+      }))
+    }).catch(() => { /* fără rețea — rămâne ce avem */ })
+    return () => { alive = false }
+  }, [wish])
 
   const onScan = useCallback((code: string) => { void fromIsbn(code) }, [fromIsbn])
 
@@ -110,6 +134,7 @@ export default function AddBook() {
     setBusy(true)
     try {
       const b = await addBook(draft)
+      if (wish) await deleteWish(wish.id).catch(() => { /* cartea e salvată; dorința rămâne, se poate șterge manual */ })
       nav(`/carte/${b.id}`, { replace: true })
     } catch (e) { setMsg('Nu am putut salva: ' + (e as Error).message) }
     setBusy(false)
@@ -189,7 +214,8 @@ export default function AddBook() {
 
       {mode === 'formular' && (
         <div className="space-y-4">
-          {draft.source !== 'manual' && <p className="text-sm text-green-700">{draft.source === 'cover_photo' ? 'Date citite de pe copertă' : 'Date completate automat'} — verifică-le și corectează ce nu e bine.</p>}
+          {wish && <p className="text-sm text-amber-800">⭐ Din lista de dorințe{members.find(m => m.id === wish.added_by) ? ` a lui ${members.find(m => m.id === wish.added_by)?.name}` : ''} — alege camera și salvează; dorința dispare de pe listă.</p>}
+          {!wish && draft.source !== 'manual' && <p className="text-sm text-green-700">{draft.source === 'cover_photo' ? 'Date citite de pe copertă' : 'Date completate automat'} — verifică-le și corectează ce nu e bine.</p>}
           <BookForm value={draft} onChange={setDraft} rooms={rooms} existingIsbns={existingIsbns} />
           {msg && <p className="text-sm text-red-600">{msg}</p>}
           <button className="btn-primary w-full" disabled={busy} onClick={() => void save()}>{busy ? 'Salvez…' : '💾 Salvează în bibliotecă'}</button>

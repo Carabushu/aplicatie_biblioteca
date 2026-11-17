@@ -17,3 +17,4 @@ export const STATUS_LABEL = { unread: 'Necitită', reading: 'În curs', read: 'C
 
 export const ACTIVE_MEMBER_KEY = 'biblioteca.activeMember'
 export const BOOKS_CACHE_KEY = 'biblioteca.booksCache'
+export const WISHES_CACHE_KEY = 'biblioteca.wishesCache'

@@ -2,8 +2,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import type { Book, BookInput, Loan, Member, ReadingStatus, Room } from '../lib/types'
-import { ACTIVE_MEMBER_KEY, BOOKS_CACHE_KEY } from '../lib/constants'
+import type { Book, BookInput, Loan, Member, ReadingStatus, Room, Wish, WishInput } from '../lib/types'
+import { ACTIVE_MEMBER_KEY, BOOKS_CACHE_KEY, WISHES_CACHE_KEY } from '../lib/constants'
 
 interface AppState {
   session: Session | null
@@ -11,6 +11,7 @@ interface AppState {
   members: Member[]
   rooms: Room[]
   books: Book[]
+  wishes: Wish[]
   booksLoading: boolean
   online: boolean
   activeMember: Member | null
@@ -23,6 +24,9 @@ interface AppState {
   setReadingStatus: (s: Partial<ReadingStatus> & { book_id: string; member_id: string }) => Promise<void>
   addLoan: (l: LoanInput) => Promise<void>
   returnLoan: (loan: Loan, returnedAt: string) => Promise<void>
+  refreshWishes: () => Promise<void>
+  addWish: (w: WishInput) => Promise<Wish>
+  deleteWish: (id: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -38,8 +42,8 @@ const Ctx = createContext<AppState | null>(null)
 
 const BOOK_SELECT = '*, reading_status(*), loans(*)'
 
-function loadCache(): Book[] {
-  try { return JSON.parse(localStorage.getItem(BOOKS_CACHE_KEY) ?? '[]') as Book[] } catch { return [] }
+function loadCache<T>(key: string): T[] {
+  try { return JSON.parse(localStorage.getItem(key) ?? '[]') as T[] } catch { return [] }
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -47,7 +51,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true)
   const [members, setMembers] = useState<Member[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
-  const [books, setBooks] = useState<Book[]>(loadCache)
+  const [books, setBooks] = useState<Book[]>(() => loadCache<Book>(BOOKS_CACHE_KEY))
+  const [wishes, setWishes] = useState<Wish[]>(() => loadCache<Wish>(WISHES_CACHE_KEY))
   const [booksLoading, setBooksLoading] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
   const [activeMemberId, setActiveMemberId] = useState<string | null>(() => localStorage.getItem(ACTIVE_MEMBER_KEY))
@@ -88,11 +93,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try { localStorage.setItem(BOOKS_CACHE_KEY, JSON.stringify(books)) } catch { /* cache prea mare — ignorăm */ }
   }, [books])
+  useEffect(() => {
+    try { localStorage.setItem(WISHES_CACHE_KEY, JSON.stringify(wishes)) } catch { /* ignorăm */ }
+  }, [wishes])
+
+  const refreshWishes = useCallback(async () => {
+    const { data, error } = await supabase.from('wishlist').select('*').order('created_at', { ascending: false })
+    if (!error && data) setWishes(data as Wish[])
+  }, [])
 
   useEffect(() => {
     if (!session) return
-    void refreshMembers(); void refreshRooms(); void refreshBooks()
-  }, [session, refreshMembers, refreshRooms, refreshBooks])
+    void refreshMembers(); void refreshRooms(); void refreshBooks(); void refreshWishes()
+  }, [session, refreshMembers, refreshRooms, refreshBooks, refreshWishes])
 
   const addBook = useCallback(async (b: BookInput) => {
     const { data, error } = await supabase.from('books').insert(clean(b)).select(BOOK_SELECT).single()
@@ -140,10 +153,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     patchLoans(loan.book_id, loans => loans.map(x => (x.id === loan.id ? (data as Loan) : x)))
   }, [])
 
+  const addWish = useCallback(async (w: WishInput) => {
+    const row = {
+      ...w, title: w.title.trim(), author: w.author?.trim() || null, note: w.note?.trim() || null,
+      isbn: w.isbn ? w.isbn.replace(/[^0-9Xx]/g, '').toUpperCase() || null : null, publisher: w.publisher?.trim() || null,
+    }
+    const { data, error } = await supabase.from('wishlist').insert(row).select().single()
+    if (error) throw error
+    const wish = data as Wish
+    setWishes(prev => [wish, ...prev])
+    return wish
+  }, [])
+
+  const deleteWish = useCallback(async (id: string) => {
+    const { error } = await supabase.from('wishlist').delete().eq('id', id)
+    if (error) throw error
+    setWishes(prev => prev.filter(w => w.id !== id))
+  }, [])
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
-    localStorage.removeItem(BOOKS_CACHE_KEY)
-    setBooks([])
+    localStorage.removeItem(BOOKS_CACHE_KEY); localStorage.removeItem(WISHES_CACHE_KEY)
+    setBooks([]); setWishes([])
   }, [])
 
   const activeMember = useMemo(() => members.find(m => m.id === activeMemberId) ?? null, [members, activeMemberId])
@@ -153,9 +184,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value: AppState = {
-    session, authLoading, members, rooms, books, booksLoading, online,
+    session, authLoading, members, rooms, books, wishes, booksLoading, online,
     activeMember, setActiveMember, refreshBooks, refreshRooms,
-    addBook, updateBook, deleteBook, setReadingStatus, addLoan, returnLoan, signOut,
+    addBook, updateBook, deleteBook, setReadingStatus, addLoan, returnLoan, refreshWishes, addWish, deleteWish, signOut,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

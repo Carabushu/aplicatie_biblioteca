@@ -3,13 +3,16 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../state/AppContext'
 import { analyzeSchoolList, pickImage, type SchoolItem } from '../lib/ai'
 import { supabase } from '../lib/supabase'
+import { addWishChecked, emptyWish, sameBook } from '../lib/wishes'
+import type { Wish } from '../lib/types'
 
 interface MatchedItem extends SchoolItem { book_id: string | null; book_title: string | null; score: number }
 interface SavedList { id: string; name: string; created_at: string; member_id: string | null; count?: number; have?: number }
 
 /** Lecturi școlare: lista de la școală (tastată, lipită sau fotografiată) → ce avem acasă și ce lipsește. */
 export default function SchoolLists() {
-  const { activeMember, members, books } = useApp()
+  const app = useApp()
+  const { activeMember, members, books, wishes } = app
   const nav = useNavigate()
   const [lists, setLists] = useState<SavedList[]>([])
   const [name, setName] = useState('')
@@ -76,6 +79,13 @@ export default function SchoolLists() {
   }
 
   const have = items?.filter(i => i.book_id).length ?? 0
+  const wishFor = activeMember?.id ?? null
+  const toWish = (it: { title: string; author: string | null }, memberId: string | null, listName: string) =>
+    addWishChecked(app, { ...emptyWish(memberId, it.title, 'school_list'), author: it.author, note: `Lectură școlară${listName ? `: ${listName}` : ''}` })
+  const missingNotWished = (items ?? []).filter(i => !i.book_id && !isWished(wishes, i.title, wishFor))
+  const allToWishes = async () => {
+    for (const it of missingNotWished) { if (!(await toWish(it, wishFor, name.trim()))) break }
+  }
 
   return (
     <div className="space-y-4">
@@ -113,10 +123,14 @@ export default function SchoolLists() {
                   <div className="text-xs text-stone-500 truncate">{it.author ?? ''}{it.book_id && it.book_title && it.book_title !== it.title ? ` · în bibliotecă: „${it.book_title}”` : ''}</div>
                 </div>
                 {it.book_id ? <Link to={`/carte/${it.book_id}`} className="text-xs text-amber-800">deschide</Link>
-                  : <Link to={`/adauga`} className="text-xs text-amber-800">adaugă</Link>}
+                  : isWished(wishes, it.title, wishFor) ? <span className="text-xs text-stone-500">⭐ pe listă</span>
+                  : <button className="text-xs text-amber-800" onClick={() => void toWish(it, wishFor, name.trim())}>⭐ la dorințe</button>}
               </div>
             ))}
           </div>
+          {missingNotWished.length > 1 && (
+            <button className="btn-secondary w-full" onClick={() => void allToWishes()}>⭐ Pune toate cele {missingNotWished.length} lipsă la dorințe</button>
+          )}
           <div className="flex gap-2">
             <button className="btn-secondary flex-1" onClick={() => setItems(null)}>Înapoi</button>
             <button className="btn-primary flex-1" disabled={!!busy} onClick={() => void saveList()}>💾 Salvează lista</button>
@@ -130,7 +144,8 @@ export default function SchoolLists() {
           <div className="font-semibold">Liste salvate</div>
           {lists.map(l => (
             <SavedListCard key={l.id} list={l} open={openId === l.id} onToggle={() => setOpenId(openId === l.id ? null : l.id)}
-              onDelete={() => void removeList(l.id)} memberName={members.find(m => m.id === l.member_id)?.name} booksVersion={books.length} />
+              onDelete={() => void removeList(l.id)} memberName={members.find(m => m.id === l.member_id)?.name} booksVersion={books.length}
+              wishes={wishes} onWish={it => void toWish(it, l.member_id ?? wishFor, l.name)} />
           ))}
         </div>
       )}
@@ -138,8 +153,9 @@ export default function SchoolLists() {
   )
 }
 
-function SavedListCard({ list, open, onToggle, onDelete, memberName, booksVersion }: {
+function SavedListCard({ list, open, onToggle, onDelete, memberName, booksVersion, wishes, onWish }: {
   list: SavedList; open: boolean; onToggle: () => void; onDelete: () => void; memberName?: string; booksVersion: number
+  wishes: Wish[]; onWish: (it: { title: string; author: string | null }) => void
 }) {
   const [items, setItems] = useState<{ id: string; title: string; author: string | null; book_id: string | null }[] | null>(null)
   useEffect(() => {
@@ -171,7 +187,9 @@ function SavedListCard({ list, open, onToggle, onDelete, memberName, booksVersio
             <div key={it.id} className="flex items-center gap-2 text-sm">
               <span>{it.book_id ? '✅' : '❌'}</span>
               <span className="flex-1 truncate">{it.title}{it.author ? ` – ${it.author}` : ''}</span>
-              {it.book_id && <Link to={`/carte/${it.book_id}`} className="text-xs text-amber-800">deschide</Link>}
+              {it.book_id ? <Link to={`/carte/${it.book_id}`} className="text-xs text-amber-800">deschide</Link>
+                : isWished(wishes, it.title, list.member_id) ? <span className="text-xs text-stone-500">⭐ pe listă</span>
+                : <button className="text-xs text-amber-800" onClick={() => onWish(it)}>⭐ la dorințe</button>}
             </div>
           ))}
           <button className="text-xs text-red-600 pt-2" onClick={onDelete}>Șterge lista</button>
@@ -192,4 +210,9 @@ function parseText(text: string): SchoolItem[] {
     if (m) return { title: m[2].trim(), author: m[1].trim() }
     return { title: l, author: null }
   })
+}
+
+/** E deja pe lista de dorințe a profilului (sau a oricui, dacă lista școlară nu are profil)? */
+function isWished(wishes: Wish[], title: string, memberId: string | null): boolean {
+  return wishes.some(w => (memberId === null || w.added_by === memberId) && sameBook(w, { title }))
 }
