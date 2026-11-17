@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useApp } from '../state/AppContext'
 import BookForm from '../components/BookForm'
 import { Cover } from '../components/BookCard'
+import LoanPanel from '../components/LoanPanel'
 import type { BookInput, ReadStatus } from '../lib/types'
 import { LANGUAGES, STATUS_LABEL } from '../lib/constants'
 
@@ -24,7 +25,6 @@ export default function BookDetail() {
   if (!book) return <p className="p-6 text-center text-stone-500">Cartea nu există (sau nu e încărcată încă).</p>
   const room = rooms.find(r => r.id === book.room_id)
   const myStatus = (book.reading_status ?? []).find(s => s.member_id === activeMember?.id)
-  const openLoan = (book.loans ?? []).find(l => !l.returned_at)
 
   const startEdit = () => {
     const { id: _id, created_at: _c, updated_at: _u, reading_status: _r, loans: _l, ...rest } = book
@@ -89,11 +89,7 @@ export default function BookDetail() {
         </div>
       </div>
       {book.notes && <p className="text-sm text-stone-600 whitespace-pre-wrap">{book.notes}</p>}
-      {openLoan && (
-        <div className="rounded-xl bg-orange-50 border border-orange-200 p-3 text-sm">
-          {openLoan.direction === 'out' ? 'Împrumutată lui' : 'Împrumutată de la'} <b>{openLoan.person}</b> din {openLoan.loaned_at}
-        </div>
-      )}
+      <LoanPanel book={book} />
 
       {activeMember && (
         <div className="card p-4 space-y-3">

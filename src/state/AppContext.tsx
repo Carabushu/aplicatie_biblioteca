@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import type { Book, BookInput, Member, ReadingStatus, Room } from '../lib/types'
+import type { Book, BookInput, Loan, Member, ReadingStatus, Room } from '../lib/types'
 import { ACTIVE_MEMBER_KEY, BOOKS_CACHE_KEY } from '../lib/constants'
 
 interface AppState {
@@ -21,7 +21,17 @@ interface AppState {
   updateBook: (id: string, b: Partial<BookInput>) => Promise<void>
   deleteBook: (id: string) => Promise<void>
   setReadingStatus: (s: Partial<ReadingStatus> & { book_id: string; member_id: string }) => Promise<void>
+  addLoan: (l: LoanInput) => Promise<void>
+  returnLoan: (loan: Loan, returnedAt: string) => Promise<void>
   signOut: () => Promise<void>
+}
+
+export interface LoanInput {
+  book_id: string
+  direction: 'out' | 'in'
+  person: string
+  loaned_at: string
+  remind_after_days: number
 }
 
 const Ctx = createContext<AppState | null>(null)
@@ -71,9 +81,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!error && data) {
       const list = data as Book[]
       setBooks(list)
-      try { localStorage.setItem(BOOKS_CACHE_KEY, JSON.stringify(list)) } catch { /* cache prea mare — ignorăm */ }
     }
   }, [])
+
+  // cache-ul offline urmărește orice schimbare locală (inclusiv împrumuturi), nu doar reîncărcările
+  useEffect(() => {
+    try { localStorage.setItem(BOOKS_CACHE_KEY, JSON.stringify(books)) } catch { /* cache prea mare — ignorăm */ }
+  }, [books])
 
   useEffect(() => {
     if (!session) return
@@ -111,6 +125,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }))
   }, [])
 
+  const patchLoans = (bookId: string, fn: (loans: Loan[]) => Loan[]) =>
+    setBooks(prev => prev.map(b => (b.id === bookId ? { ...b, loans: fn(b.loans ?? []) } : b)))
+
+  const addLoan = useCallback(async (l: LoanInput) => {
+    const { data, error } = await supabase.from('loans').insert({ ...l, person: l.person.trim() }).select().single()
+    if (error) throw error
+    patchLoans(l.book_id, loans => [...loans, data as Loan])
+  }, [])
+
+  const returnLoan = useCallback(async (loan: Loan, returnedAt: string) => {
+    const { data, error } = await supabase.from('loans').update({ returned_at: returnedAt }).eq('id', loan.id).select().single()
+    if (error) throw error
+    patchLoans(loan.book_id, loans => loans.map(x => (x.id === loan.id ? (data as Loan) : x)))
+  }, [])
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     localStorage.removeItem(BOOKS_CACHE_KEY)
@@ -126,7 +155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: AppState = {
     session, authLoading, members, rooms, books, booksLoading, online,
     activeMember, setActiveMember, refreshBooks, refreshRooms,
-    addBook, updateBook, deleteBook, setReadingStatus, signOut,
+    addBook, updateBook, deleteBook, setReadingStatus, addLoan, returnLoan, signOut,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

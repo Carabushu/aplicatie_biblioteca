@@ -36,9 +36,11 @@ Măsurători reale: baza de date 156 MB din 500 MB (aproape tot `cip_books`); o 
 src/state/AppContext.tsx      sesiune, profil activ, cărți (cache localStorage), CRUD
 src/lib/catalog.ts            căutare: cip_books → Google Books → Open Library; validare ISBN
 src/lib/ai.ts                 redimensionare imagine + apel Edge Function
+src/lib/pwa.ts                actualizare automată PWA (T1)
+src/lib/loans.ts              calcule termene împrumuturi
 src/lib/types.ts, constants.ts, csv.ts, text.ts
-src/components/               BarcodeScanner (BarcodeDetector nativ + ZXing lazy), BookForm, BookCard, Layout
-src/pages/                    Login, ChooseProfile, Library, BookDetail, AddBook, HaveIt, ShelfImport, SchoolLists, Settings
+src/components/               BarcodeScanner (BarcodeDetector nativ + ZXing lazy), BookForm, BookCard, Layout, LoanPanel
+src/pages/                    Login, ChooseProfile, Library, BookDetail, AddBook, HaveIt, ShelfImport, SchoolLists, Settings, Loans
 supabase/migrations/          0001 schema · 0002 cip_books · 0003 slim + indexuri · 0004 ai_calls, school_lists, „La serviciu”
 supabase/functions/analyze-image/
 tools/cip-import/             import CIP (Node): index.mjs (descărcare+parsare), parse.mjs, extract.mjs, upload.mjs, README
@@ -46,7 +48,7 @@ tools/cip-import/             import CIP (Node): index.mjs (descărcare+parsare)
 
 ### Model de date
 `members`, `rooms`, `books` (public `audience[]`, genuri, etichete, serie, cameră, sub-locație, exemplare, `adults_only`, `needs_review`, `source`),
-`reading_status` (carte × membru), `loans` (există, **fără interfață**), `wishlist` (există, **fără interfață**),
+`reading_status` (carte × membru), `loans` (interfață din V3-A), `wishlist` (există, **fără interfață**),
 `cip_books`, `ai_calls` (+ view `ai_usage_month`), `school_lists`, `school_list_items`.
 Funcții SQL: `f_unaccent` (înveliș imutabil), `find_similar_books(p_title, p_author, p_limit)`, `search_cip(p_q, p_limit)`.
 
@@ -60,7 +62,7 @@ Funcții SQL: `f_unaccent` (înveliș imutabil), `find_similar_books(p_title, p_
 - Arhiva CIP veche (`oldsite.bibnat.ro`) e moartă → scriptul ia PDF-urile din Internet Archive, verifică `%%EOF` (multe capturi sunt trunchiate). 2005, 2006, 2008 sunt scanate fără text; 2018-06 și 2018-12 lipsesc.
 - Parser CIP: pagini rotite și duble (2009–2018), numerotare cu salturi, linii UDC care seamănă cu numere de intrare (`087.5`), coduri CIP greșite (`CIP 201-02332`), diacritice Mac Roman.
 - PowerShell pe laptopul utilizatorului: `npm` blocat de execution policy → `npm.cmd` sau `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
-- PWA: după un deploy, telefonul arată versiunea nouă abia la a doua deschidere (vezi sarcina T1).
+- PWA: fără `registerSW` explicit, telefonul arăta versiunea nouă abia la a doua deschidere; rezolvat în T1. Pe Android, o PWA redeschisă din „recente” nu navighează, deci verificarea trebuie declanșată manual (`reg.update()` pe `visibilitychange`).
 - Mediul de lucru al asistentului nu ajunge la Supabase, bibnat.ro sau Deno: SQL-ul îl rulează utilizatorul în SQL Editor, iar Edge Function-ul nu a putut fi testat local (a fost confirmat de utilizator în producție).
 
 ## 5. Cum se lucrează cu utilizatorul
@@ -78,21 +80,22 @@ Funcții SQL: `f_unaccent` (înveliș imutabil), `find_similar_books(p_title, p_
 
 ## 7. Plan V3
 
-Ordinea recomandată: T1 → A → B → restul.
+Ordinea recomandată: T1 → A → B → restul. (T1 și A livrate pe 17 nov 2026; urmează B.)
 
-### T1. Actualizare automată a PWA (mic)
-Acum `registerType: 'autoUpdate'` fără reîncărcare. De făcut: `import { registerSW } from 'virtual:pwa-register'` în `main.tsx`, cu `onNeedRefresh` → reîncărcare automată (sau banner „Versiune nouă — Actualizează”); adaugă `vite-plugin-pwa/client` la tipuri.
-Gata când: după un deploy, aplicația deschisă pe telefon trece singură la versiunea nouă.
+### T1. Actualizare automată a PWA — FĂCUT (17 nov 2026, de confirmat pe telefon)
+`src/lib/pwa.ts`, apelat din `main.tsx`: `registerSW` din `virtual:pwa-register` (tipuri: `vite-plugin-pwa/client` în `tsconfig.app.json`).
+Verifică versiune nouă la fiecare revenire în aplicație (`visibilitychange`) și din oră în oră. Când noul SW e activ:
+pe `/` (lista) sau cu aplicația în fundal reîncarcă imediat; pe alte ecrane arată banner „Versiune nouă — Actualizează”
+și reîncarcă singură la următoarea revenire (ca să nu piardă un formular început). `vercel.json`: `sw.js` și `index.html` fără cache.
 
-### A. Împrumuturi (cerință din prompt-ul inițial)
-Tabelul `loans` există (`direction` out/in, `person`, `loaned_at`, `remind_after_days`, `returned_at`); `books` e deja citit cu `loans(*)`.
-- În `BookDetail`: buton „Împrumută” (cui, data implicit azi, zile până la reamintire implicit 30) și „A fost returnată”.
-- Sens invers: „Am împrumutat-o de la…” (`direction = 'in'`).
-- Pagină/secțiune „Împrumuturi”: active, întârziate primele; istoric.
-- Banner la deschiderea aplicației când există împrumuturi peste termen (fără push; push web doar dacă se cere ulterior).
-- Filtrul „împrumutată” din `Library` există deja și va începe să aibă date.
-- În `AppContext`: `addLoan`, `returnLoan`, cu actualizarea stării locale.
-Gata când: o carte poate fi împrumutată și returnată din telefon, iar cele întârziate apar la deschidere.
+### A. Împrumuturi — FĂCUT (17 nov 2026, de confirmat pe telefon)
+Fără migrare nouă (tabelul `loans` și politica RLS existau).
+- `src/lib/loans.ts`: termen (`loaned_at + remind_after_days`), zile peste termen, sortare, texte în română; data de azi în fus local.
+- `AppContext`: `addLoan`, `returnLoan` (actualizează starea locală); cache-ul offline se scrie acum la orice schimbare a `books`.
+- `components/LoanPanel.tsx` în `BookDetail`: „🤝 Împrumută” / „📥 Am împrumutat-o de la…” (cui, data, reamintire 14/30/60 sau oricâte zile; sugestii din numele folosite), „✅ A fost returnată” / „↩️ Am dat-o înapoi” (la cele luate de la alții întreabă dacă ștergem cartea din bibliotecă), istoric. Se pot împrumuta atâtea exemplare câte are cartea.
+- `pages/Loans.tsx` (`/imprumuturi`, link din antetul listei): date altora / luate de la alții, întârziatele primele, istoric.
+- `Layout`: banner roșu cu împrumuturile peste termen la deschidere (se ascunde cu ×). `BookCard`: etichete „La X” / „De la X”, roșii când sunt întârziate.
+- Profilurile copiilor văd împrumuturile (fără cărțile `adults_only`), dar nu pot crea/returna. Offline: butoanele sunt dezactivate.
 
 ### B. Lista de dorințe (cerință din prompt-ul inițial)
 Tabelul `wishlist` există (`title`, `author`, `isbn`, `note`, `added_by`).

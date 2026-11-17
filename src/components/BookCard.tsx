@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Book, Member, Room } from '../lib/types'
+import { isOverdue } from '../lib/loans'
 
 interface Props { book: Book; rooms: Room[]; members: Member[]; selected?: boolean; onToggleSelect?: () => void }
 
@@ -19,7 +20,10 @@ export default function BookCard({ book, rooms, members, selected, onToggleSelec
     .map(s => members.find(m => m.id === s.member_id)).filter(Boolean) as Member[]
   const reading = (book.reading_status ?? []).filter(s => s.status === 'reading')
     .map(s => members.find(m => m.id === s.member_id)).filter(Boolean) as Member[]
-  const onLoan = (book.loans ?? []).some(l => !l.returned_at && l.direction === 'out')
+  const openLoans = (book.loans ?? []).filter(l => !l.returned_at)
+  const onLoan = openLoans.find(l => l.direction === 'out')
+  const borrowed = openLoans.find(l => l.direction === 'in')
+  const late = openLoans.some(isOverdue)
 
   const inner = (
     <div className={`card flex gap-3 p-2 ${selected ? 'ring-2 ring-amber-600' : ''}`}>
@@ -34,7 +38,8 @@ export default function BookCard({ book, rooms, members, selected, onToggleSelec
             </span>
           ))}
           {room && <span className="rounded-full bg-stone-100 px-2 py-0.5 text-stone-700">📍 {room.name}</span>}
-          {onLoan && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-orange-800">Împrumutată</span>}
+          {onLoan && <span className={`rounded-full px-2 py-0.5 ${late ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'}`}>{late ? '⏰ ' : ''}La {onLoan.person}</span>}
+          {borrowed && <span className={`rounded-full px-2 py-0.5 ${late ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>{late ? '⏰ ' : ''}De la {borrowed.person}</span>}
           {book.needs_review && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-yellow-800">De verificat</span>}
         </div>
         {(readers.length > 0 || reading.length > 0) && (

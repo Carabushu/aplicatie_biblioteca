@@ -65,9 +65,10 @@ export default function Library() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h1 className="text-2xl font-bold text-amber-900">📚 Cărțile noastre</h1>
         <div className="flex items-center gap-3">
+          <Link to="/imprumuturi" className="text-sm text-amber-800">🤝 Împrumuturi</Link>
           <Link to="/lecturi" className="text-sm text-amber-800">🎒 Lecturi</Link>
           <span className="text-sm text-stone-500">{visible.length} / {books.length}</span>
         </div>
